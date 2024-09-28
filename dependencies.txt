@@ -1,0 +1,9 @@
+pip install django-cors-headers
+
+
+
+to run
+python manage.py runserver
+
+to migrate changes
+python manage.py migrate
