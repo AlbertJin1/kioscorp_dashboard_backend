@@ -43,10 +43,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
 ]
 
-AUTH_USER_MODEL = 'accounts.CustomUser'
-
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Should be at the top
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -56,10 +54,20 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# CORS Configuration
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Add your React frontend URL here
-    # Add any other allowed origins
+    "http://localhost:3000",  # Frontend URL
 ]
+
+# Django REST Framework configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}
+
+# Custom User Model
+AUTH_USER_MODEL = 'accounts.CustomUser'
 
 ROOT_URLCONF = 'kioscorp_dashboard_backend.urls'
 
