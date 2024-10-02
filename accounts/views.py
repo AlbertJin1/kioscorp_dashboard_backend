@@ -85,6 +85,16 @@ def get_users(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsOwnerOrAdmin])
+def add_user(request):
+    serializer = UserSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'success': 'User added successfully!'}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['GET'])
 # Use custom permission for owner/admin
 @permission_classes([IsAuthenticated, IsOwnerOrAdmin])

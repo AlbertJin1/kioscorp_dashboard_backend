@@ -8,6 +8,7 @@ from .views import (
     delete_user,
     update_user,
     get_user_by_id,
+    add_user,  # Import the add_user view
 )
 
 urlpatterns = [
@@ -16,10 +17,9 @@ urlpatterns = [
     path('api/login/', login, name='login'),
     path('api/profile/', update_profile, name='update_profile'),
     path('api/users/', get_users, name='get_users'),
-    path('api/users/<int:user_id>/', get_user_by_id,
-         name='get_user_by_id'),  # Fetch user by ID
-    path('api/users/<int:user_id>/delete/', delete_user,
-         name='delete_user'),  # Delete user by ID
-    path('api/users/<int:user_id>/update/', update_user,
-         name='update_user'),  # Update user by ID
+    # New endpoint for adding a user
+    path('api/users/add/', add_user, name='add_user'),
+    path('api/users/<int:user_id>/', get_user_by_id, name='get_user_by_id'),
+    path('api/users/<int:user_id>/delete/', delete_user, name='delete_user'),
+    path('api/users/<int:user_id>/update/', update_user, name='update_user'),
 ]
