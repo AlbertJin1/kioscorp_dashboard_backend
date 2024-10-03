@@ -19,3 +19,9 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class Log(models.Model):
+    username = models.CharField(max_length=255)
+    action = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)

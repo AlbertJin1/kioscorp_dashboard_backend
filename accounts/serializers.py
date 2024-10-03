@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import CustomUser
+from .models import CustomUser, Log
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -32,3 +32,9 @@ class UserSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         return user
+
+
+class LogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Log
+        fields = ['id', 'username', 'action', 'timestamp']

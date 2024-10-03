@@ -3,23 +3,30 @@ from .views import (
     register,
     register_owner,
     login,
+    logout,
+    change_password,
     update_profile,
     get_users,
     delete_user,
     update_user,
     get_user_by_id,
-    add_user,  # Import the add_user view
+    add_user,
+    LogView,
 )
 
 urlpatterns = [
     path('api/register/', register, name='register'),
     path('api/register-owner/', register_owner, name='register_owner'),
     path('api/login/', login, name='login'),
+    # Ensure this matches the request
+    path('api/logout/', logout, name='logout'),
     path('api/profile/', update_profile, name='update_profile'),
+    path('api/change-password/', change_password, name='change_password'),
     path('api/users/', get_users, name='get_users'),
     # New endpoint for adding a user
     path('api/users/add/', add_user, name='add_user'),
     path('api/users/<int:user_id>/', get_user_by_id, name='get_user_by_id'),
     path('api/users/<int:user_id>/delete/', delete_user, name='delete_user'),
     path('api/users/<int:user_id>/update/', update_user, name='update_user'),
+    path('logs/', LogView.as_view(), name='logs'),  # Added name for logs view
 ]
