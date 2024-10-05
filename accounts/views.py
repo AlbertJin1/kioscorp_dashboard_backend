@@ -2,8 +2,8 @@ from django.contrib.auth import authenticate, logout as django_logout
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from .models import CustomUser, Log
-from .serializers import UserSerializer, LogSerializer
+from .models import CustomUser, Log, MainCategory, SubCategory, Product
+from .serializers import UserSerializer, LogSerializer, MainCategorySerializer, SubCategorySerializer, ProductSerializer
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsOwnerOrAdmin
@@ -37,12 +37,12 @@ class LogView(APIView):
             else:
                 return Response({'message': 'Log entry already exists'}, status=409)
 
-    def delete(self, request):
-        Log.objects.all().delete()
-        return Response(status=204)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request):
         Log.objects.all().delete()
+        Log.objects.create(username=request.user.username,
+                           action='Deleted all logs')
         return Response(status=204)
 
 
@@ -141,7 +141,7 @@ def change_password(request):
     if not user.check_password(current_password):
         return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Validate the new password (You can customize this validation logic as needed)
+    # Validate the new password
     if len(new_password) < 8:
         return Response({'error': 'New password must be at least 8 characters long'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -236,3 +236,80 @@ def delete_user(request, user_id):
         return Response({'success': 'User deleted successfully!'}, status=status.HTTP_204_NO_CONTENT)
     except CustomUser.DoesNotExist:
         return Response({'error': 'User not found!'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class MainCategoryView(APIView):
+    def get(self, request):
+        main_categories = MainCategory.objects.all()
+        serializer = MainCategorySerializer(main_categories, many=True)
+        Log.objects.create(username=request.user.username,
+                           action='Viewed all main categories')
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = MainCategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            Log.objects.create(username=request.user.username,
+                               action='Added a new main category')
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# views.py
+class SubCategoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sub_categories = SubCategory.objects.all()
+        serializer = SubCategorySerializer(sub_categories, many=True)
+        Log.objects.create(username=request.user.username,
+                           action='Viewed all sub categories')
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = SubCategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            Log.objects.create(username=request.user.username,
+                               action='Added a new sub category')
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CreateSubCategoryView(APIView):
+    permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+
+    def post(self, request):
+        serializer = SubCategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            Log.objects.create(username=request.user.username,
+                               action='Added a new sub category')
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class SubCategoryCountView(APIView):
+    def get(self, request, main_category):
+        count = SubCategory.objects.filter(main_category=main_category).count()
+        return Response({'count': count})
+
+
+# views.py
+class ProductView(APIView):
+    def get(self, request):
+        products = Product.objects.all()
+        serializer = ProductSerializer(products, many=True)
+        Log.objects.create(username=request.user.username,
+                           action='Viewed all products')
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            Log.objects.create(username=request.user.username,
+                               action='Added a new product')
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

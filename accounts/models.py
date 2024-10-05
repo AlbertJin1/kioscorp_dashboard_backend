@@ -1,8 +1,9 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
-class CustomUser(AbstractUser):
+class CustomUser (AbstractUser):
     ROLE_CHOICES = (
         ('owner', 'Owner'),
         ('admin', 'Admin'),
@@ -25,3 +26,56 @@ class Log(models.Model):
     username = models.CharField(max_length=255)
     action = models.CharField(max_length=255)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+
+class MainCategory(models.Model):
+    main_category_id = models.AutoField(primary_key=True)
+    main_category_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.main_category_name
+
+
+class SubCategory(models.Model):
+    sub_category_id = models.AutoField(primary_key=True)
+    sub_category_name = models.CharField(max_length=255)
+    main_category = models.ForeignKey(MainCategory, on_delete=models.CASCADE)
+
+    def save(self, *args, **kwargs):
+        if not self.sub_category_id:
+            year = timezone.now().year
+            month = timezone.now().month
+            count = SubCategory.objects.filter(sub_category_id__startswith=f"{
+                                               year}{month:02}").count() + 1
+            self.sub_category_id = int(f"{year}{month:02}{count}")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.sub_category_name
+
+
+class Product(models.Model):
+    product_id = models.AutoField(primary_key=True)
+    product_image = models.ImageField(upload_to='products/')
+    product_name = models.CharField(max_length=255)
+    product_type = models.CharField(max_length=255)
+    product_size = models.CharField(max_length=255)
+    product_brand = models.CharField(max_length=255)
+    product_color = models.CharField(max_length=255)
+    product_quantity = models.IntegerField(default=0)
+    product_price = models.DecimalField(max_digits=10, decimal_places=2)
+    product_added = models.DateTimeField(auto_now_add=True)
+    main_category = models.ForeignKey(MainCategory, on_delete=models.CASCADE)
+    sub_category = models.ForeignKey(SubCategory, on_delete=models.CASCADE)
+
+    def save(self, *args, **kwargs):
+        if not self.product_id:
+            year = timezone.now().year
+            month = timezone.now().month
+            count = Product.objects.filter(product_id__startswith=f"{
+                                           year}{month:02}").count() + 1
+            self.product_id = f"{year}{month:02}{count:07}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.product_name

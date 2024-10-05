@@ -1,4 +1,7 @@
+# urls.py
 from django.urls import path
+from django.conf import settings
+from django.conf.urls.static import static
 from .views import (
     register,
     register_owner,
@@ -12,6 +15,9 @@ from .views import (
     get_user_by_id,
     add_user,
     LogView,
+    MainCategoryView,
+    SubCategoryView,
+    ProductView,
 )
 
 urlpatterns = [
@@ -29,4 +35,12 @@ urlpatterns = [
     path('api/users/<int:user_id>/delete/', delete_user, name='delete_user'),
     path('api/users/<int:user_id>/update/', update_user, name='update_user'),
     path('logs/', LogView.as_view(), name='logs'),  # Added name for logs view
+    path('api/main-categories/', MainCategoryView.as_view(), name='main_categories'),
+    path('api/sub-categories/', SubCategoryView.as_view(), name='sub_categories'),
+    path('api/products/', ProductView.as_view(), name='products'),
+    path('api/products/<int:product_id>/',
+         ProductView.as_view(), name='product_detail'),
 ]
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL,
+                          document_root=settings.MEDIA_ROOT)

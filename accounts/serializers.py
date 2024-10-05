@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import CustomUser, Log
+from .models import CustomUser, Log, MainCategory, SubCategory, Product
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -38,3 +38,24 @@ class LogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Log
         fields = ['id', 'username', 'action', 'timestamp']
+
+
+class MainCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MainCategory
+        fields = ['main_category_id', 'main_category_name']
+
+
+# serializers.py
+class SubCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubCategory
+        fields = ['sub_category_id', 'sub_category_name', 'main_category']
+
+
+# serializers.py
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ['product_id', 'product_image', 'product_name', 'product_type', 'product_size', 'product_brand',
+                  'product_color', 'product_quantity', 'product_price', 'product_added', 'main_category', 'sub_category']
