@@ -256,7 +256,6 @@ class MainCategoryView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# views.py
 class SubCategoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -270,9 +269,12 @@ class SubCategoryView(APIView):
     def post(self, request):
         serializer = SubCategorySerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            Log.objects.create(username=request.user.username,
-                               action='Added a new sub category')
+            sub_category = serializer.save()  # Save and get the created subcategory
+            Log.objects.create(
+                username=request.user.username,
+                action=f"Added a new sub category: {sub_category.sub_category_name} in {
+                    sub_category.main_category.main_category_name}"  # Include both sub_category_name and main_category_name
+            )
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -296,7 +298,6 @@ class SubCategoryCountView(APIView):
         return Response({'count': count})
 
 
-# views.py
 class ProductView(APIView):
     def get(self, request):
         products = Product.objects.all()
@@ -313,3 +314,38 @@ class ProductView(APIView):
                                action='Added a new product')
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProductDetailView(APIView):
+    def get(self, request, product_id):
+        try:
+            product = Product.objects.get(id=product_id)
+            serializer = ProductSerializer(product)
+            Log.objects.create(username=request.user.username,
+                               action=f'Viewed product {product.product_name}')
+            return Response(serializer.data)
+        except Product.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, product_id):
+        try:
+            product = Product.objects.get(id=product_id)
+            serializer = ProductSerializer(product, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                Log.objects.create(username=request.user.username,
+                                   action=f'Updated product {product.product_name}')
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Product.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, product_id):
+        try:
+            product = Product.objects.get(id=product_id)
+            product.delete()
+            Log.objects.create(username=request.user.username,
+                               action=f'Deleted product {product.product_name}')
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Product.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)

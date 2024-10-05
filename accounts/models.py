@@ -63,9 +63,11 @@ class Product(models.Model):
     product_brand = models.CharField(max_length=255)
     product_color = models.CharField(max_length=255)
     product_quantity = models.IntegerField(default=0)
+    product_description = models.TextField(
+        blank=True, null=True)  # Add this line
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     product_added = models.DateTimeField(auto_now_add=True)
-    main_category = models.ForeignKey(MainCategory, on_delete=models.CASCADE)
+
     sub_category = models.ForeignKey(SubCategory, on_delete=models.CASCADE)
 
     def save(self, *args, **kwargs):
@@ -76,6 +78,9 @@ class Product(models.Model):
                                            year}{month:02}").count() + 1
             self.product_id = f"{year}{month:02}{count:07}"
         super().save(*args, **kwargs)
+
+    def get_main_category(self):
+        return self.sub_category.main_category
 
     def __str__(self):
         return self.product_name
