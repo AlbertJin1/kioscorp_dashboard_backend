@@ -300,7 +300,11 @@ class SubCategoryCountView(APIView):
 
 class ProductView(APIView):
     def get(self, request):
-        products = Product.objects.all()
+        sub_category_id = request.GET.get('sub_category')
+        if sub_category_id:
+            products = Product.objects.filter(sub_category=sub_category_id)
+        else:
+            products = Product.objects.all()
         serializer = ProductSerializer(products, many=True)
         Log.objects.create(username=request.user.username,
                            action='Viewed all products')
@@ -315,11 +319,10 @@ class ProductView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ProductDetailView(APIView):
     def get(self, request, product_id):
         try:
-            product = Product.objects.get(id=product_id)
+            product = Product.objects.get(product_id=product_id)
             serializer = ProductSerializer(product)
             Log.objects.create(username=request.user.username,
                                action=f'Viewed product {product.product_name}')
@@ -329,7 +332,7 @@ class ProductDetailView(APIView):
 
     def put(self, request, product_id):
         try:
-            product = Product.objects.get(id=product_id)
+            product = Product.objects.get(product_id=product_id)
             serializer = ProductSerializer(product, data=request.data)
             if serializer.is_valid():
                 serializer.save()
@@ -342,7 +345,10 @@ class ProductDetailView(APIView):
 
     def delete(self, request, product_id):
         try:
-            product = Product.objects.get(id=product_id)
+            product = Product.objects.get(product_id=product_id)
+            # Delete the associated product image
+            if product.product_image:
+                product.product_image.delete()
             product.delete()
             Log.objects.create(username=request.user.username,
                                action=f'Deleted product {product.product_name}')
