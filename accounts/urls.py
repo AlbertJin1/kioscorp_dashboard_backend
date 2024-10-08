@@ -37,6 +37,11 @@ urlpatterns = [
     path("logs/", LogView.as_view(), name="logs"),  # Added name for logs view
     path("api/main-categories/", MainCategoryView.as_view(), name="main_categories"),
     path("api/sub-categories/", SubCategoryView.as_view(), name="sub_categories"),
+    path(
+        "api/sub-categories/<int:sub_category_id>/",
+        SubCategoryView.as_view(),
+        name="sub_category_detail",
+    ),
     path("api/products/", ProductView.as_view(), name="products"),
     path(
         "api/products/<int:product_id>/",

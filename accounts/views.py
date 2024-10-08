@@ -278,6 +278,33 @@ class SubCategoryView(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def patch(self, request, sub_category_id):
+        try:
+            sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
+            serializer = SubCategorySerializer(sub_category, data=request.data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                Log.objects.create(
+                    username=request.user.username,
+                    action=f"Updated subcategory {sub_category.sub_category_name}",
+                )
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except SubCategory.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    def delete(self, request, sub_category_id):
+        try:
+            sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
+            if Product.objects.filter(sub_category=sub_category).exists():
+                return Response({'error': 'Cannot delete subcategory. It has associated products.'}, status=status.HTTP_400_BAD_REQUEST)
+            sub_category.delete()
+            Log.objects.create(username=request.user.username,
+                               action=f'Deleted subcategory {sub_category.sub_category_name}')
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except SubCategory.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
 
 class CreateSubCategoryView(APIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]

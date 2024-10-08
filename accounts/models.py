@@ -36,6 +36,12 @@ class MainCategory(models.Model):
         return self.main_category_name
 
 
+class NextSubCategoryId(models.Model):
+    next_id = models.IntegerField(default=1)
+
+class NextProductId(models.Model):
+    next_id = models.IntegerField(default=1)
+
 class SubCategory(models.Model):
     sub_category_id = models.AutoField(primary_key=True)
     sub_category_name = models.CharField(max_length=255)
@@ -43,11 +49,18 @@ class SubCategory(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.sub_category_id:
-            year = timezone.now().year
-            month = timezone.now().month
-            count = SubCategory.objects.filter(sub_category_id__startswith=f"{
-                                               year}{month:02}").count() + 1
-            self.sub_category_id = int(f"{year}{month:02}{count}")
+            next_id = NextSubCategoryId.objects.first()
+            if next_id:
+                year = timezone.now().year
+                month = timezone.now().month
+                self.sub_category_id = f"{year}{month:02}{next_id.next_id:04}"
+                next_id.next_id += 1
+                next_id.save()
+            else:
+                year = timezone.now().year
+                month = timezone.now().month
+                self.sub_category_id = f"{year}{month:02}0001"
+                NextSubCategoryId.objects.create(next_id=2)
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -56,15 +69,14 @@ class SubCategory(models.Model):
 
 class Product(models.Model):
     product_id = models.AutoField(primary_key=True)
-    product_image = models.ImageField(upload_to='products/')
+    product_image = models.ImageField(upload_to="products/")
     product_name = models.CharField(max_length=255)
     product_type = models.CharField(max_length=255)
     product_size = models.CharField(max_length=255)
     product_brand = models.CharField(max_length=255)
     product_color = models.CharField(max_length=255)
     product_quantity = models.IntegerField(default=0)
-    product_description = models.TextField(
-        blank=True, null=True)  # Add this line
+    product_description = models.TextField(blank=True, null=True)  # Add this line
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     product_added = models.DateTimeField(auto_now_add=True)
 
@@ -72,15 +84,19 @@ class Product(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.product_id:
-            year = timezone.now().year
-            month = timezone.now().month
-            count = Product.objects.filter(product_id__startswith=f"{
-                                           year}{month:02}").count() + 1
-            self.product_id = f"{year}{month:02}{count:07}"
+            next_id = NextProductId.objects.first()
+            if next_id:
+                year = timezone.now().year
+                month = timezone.now().month
+                self.product_id = f"{year}{month:02}{next_id.next_id:07}"
+                next_id.next_id += 1
+                next_id.save()
+            else:
+                year = timezone.now().year
+                month = timezone.now().month
+                self.product_id = f"{year}{month:02}0000001"
+                NextProductId.objects.create(next_id=2)
         super().save(*args, **kwargs)
-
-    def get_main_category(self):
-        return self.sub_category.main_category
 
     def __str__(self):
         return self.product_name
