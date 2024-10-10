@@ -17,6 +17,7 @@ class CustomUser (AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     role = models.CharField(
         max_length=10, choices=ROLE_CHOICES, default='employee')
+    profile_picture = models.ImageField(upload_to='user_profile/', blank=True, null=True)
 
     def __str__(self):
         return self.username

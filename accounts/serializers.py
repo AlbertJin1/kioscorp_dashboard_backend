@@ -43,6 +43,20 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
+class UpdateProfileSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.ImageField(required=False)
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            "first_name",
+            "last_name",
+            "phone_number",
+            "gender",
+            "profile_picture",
+        ]
+
+
 class LogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Log

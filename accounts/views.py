@@ -10,6 +10,7 @@ from .permissions import IsOwnerOrAdmin
 from rest_framework.views import APIView
 from django.utils import timezone
 from datetime import timedelta
+from django.http import HttpResponse
 
 
 class LogView(APIView):
@@ -128,6 +129,35 @@ def update_profile(request):
         'success': 'Profile updated successfully!',
         'role': user.role,
     }, status=status.HTTP_200_OK)
+    
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_profile_picture(request):
+    user = request.user  # The authenticated user making the request
+    if 'profilePicture' in request.FILES:
+        if user.profile_picture:
+            user.profile_picture.delete()
+        user.profile_picture = request.FILES['profilePicture']
+        user.save()  # Save changes to the user instance
+        Log.objects.create(username=user.username, action='Updated profile picture')
+        return Response({
+            'success': 'Profile picture updated successfully!',
+        }, status=status.HTTP_200_OK)
+    else:
+        return Response({
+            'error': 'No profile picture provided.',
+        }, status=status.HTTP_400_BAD_REQUEST)
+        
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_profile_picture(request):
+    user = request.user  # The authenticated user making the request
+    if user.profile_picture:
+        return HttpResponse(user.profile_picture, content_type='image/jpeg')
+    else:
+        return Response({
+            'error': 'No profile picture available.',
+        }, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['PUT'])
