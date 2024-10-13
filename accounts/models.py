@@ -1,7 +1,15 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.conf import settings
 
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)
+def create_default_owner(sender, instance, created, **kwargs):
+    if created and instance.username == 'owner':
+        instance.role = 'owner'
+        instance.save()
 
 class CustomUser (AbstractUser):
     ROLE_CHOICES = (
@@ -47,6 +55,7 @@ class SubCategory(models.Model):
     sub_category_id = models.AutoField(primary_key=True)
     sub_category_name = models.CharField(max_length=255)
     main_category = models.ForeignKey(MainCategory, on_delete=models.CASCADE)
+    sub_category_image = models.ImageField(upload_to="subcategories/", null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.sub_category_id:

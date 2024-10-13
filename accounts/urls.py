@@ -20,7 +20,9 @@ from .views import (
     ProductDetailView,
     update_profile_picture,
     get_profile_picture,
+    print_receipt,
 )
+
 
 urlpatterns = [
     path("api/register/", register, name="register"),
@@ -50,8 +52,13 @@ urlpatterns = [
         ProductDetailView.as_view(),
         name="product_detail",
     ),
-    path("api/update-profile-picture/", update_profile_picture, name="update_profile_picture"),
+    path(
+        "api/update-profile-picture/",
+        update_profile_picture,
+        name="update_profile_picture",
+    ),
     path("api/profile-picture/", get_profile_picture, name="get_profile_picture"),
+    path("api/print-receipt/", print_receipt, name="print_receipt"),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

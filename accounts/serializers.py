@@ -73,10 +73,20 @@ class MainCategorySerializer(serializers.ModelSerializer):
 class SubCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SubCategory
-        fields = ["sub_category_id", "sub_category_name", "main_category"]
+        fields = [
+            "sub_category_id",
+            "sub_category_name",
+            "main_category",
+            "sub_category_image",
+        ]
 
     def update(self, instance, validated_data):
-        instance.sub_category_name = validated_data["sub_category_name"]
+        instance.sub_category_name = validated_data.get(
+            "sub_category_name", instance.sub_category_name
+        )
+        instance.sub_category_image = validated_data.get(
+            "sub_category_image", instance.sub_category_image
+        )
         instance.save()
         Log.objects.create(
             username=self.context["request"].user.username,

@@ -58,6 +58,7 @@ MIDDLEWARE = [
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Frontend URL
+    "http://localhost:3001",
 ]
 
 # Django REST Framework configuration
