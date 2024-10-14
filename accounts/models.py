@@ -89,7 +89,8 @@ class Product(models.Model):
     product_description = models.TextField(blank=True, null=True)  # Add this line
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     product_added = models.DateTimeField(auto_now_add=True)
-
+    product_sold = models.IntegerField(default=0)
+    
     sub_category = models.ForeignKey(SubCategory, on_delete=models.CASCADE)
 
     def save(self, *args, **kwargs):

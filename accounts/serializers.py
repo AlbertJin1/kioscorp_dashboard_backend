@@ -97,6 +97,7 @@ class SubCategorySerializer(serializers.ModelSerializer):
 
 # serializers.py
 class ProductSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Product
         fields = [
@@ -112,4 +113,27 @@ class ProductSerializer(serializers.ModelSerializer):
             "product_price",
             "product_added",
             "sub_category",
+            "product_sold",
+        ]
+
+
+class ProductWithSubCategorySerializer(serializers.ModelSerializer):
+    sub_category = SubCategorySerializer()  # Include subcategory details
+
+    class Meta:
+        model = Product
+        fields = [
+            "product_id",
+            "product_image",
+            "product_name",
+            "product_type",
+            "product_size",
+            "product_brand",
+            "product_color",
+            "product_quantity",
+            "product_description",
+            "product_price",
+            "product_added",
+            "sub_category",  # Ensure this is included
+            "product_sold",
         ]

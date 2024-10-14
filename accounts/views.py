@@ -9,6 +9,7 @@ from .serializers import (
     MainCategorySerializer,
     SubCategorySerializer,
     ProductSerializer,
+    ProductWithSubCategorySerializer,
 )
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
@@ -468,12 +469,37 @@ class SubCategoryCountView(APIView):
 
 class ProductView(APIView):
     def get(self, request):
-        sub_category_id = request.GET.get("sub_category")
-        if sub_category_id:
-            products = Product.objects.filter(sub_category=sub_category_id)
+        category = request.GET.get("category")  # Accept a category query parameter
+        subcategory = request.GET.get(
+            "subcategory"
+        )  # Accept a subcategory query parameter
+        include_subcategory = (
+            request.GET.get("include_subcategory", "false").lower() == "true"
+        )  # Check if subcategory should be included
+
+        # Start with the base queryset
+        products = Product.objects.all()
+
+        # Filter by category if provided
+        if category:
+            products = products.filter(
+                sub_category__main_category__main_category_name=category
+            )
+
+        # Filter by subcategory if provided
+        if subcategory:
+            products = products.filter(sub_category__sub_category_name=subcategory)
+
+        # Choose the serializer based on the include_subcategory flag
+        if include_subcategory:
+            serializer = ProductWithSubCategorySerializer(
+                products, many=True
+            )  # Use this serializer if subcategory is needed
         else:
-            products = Product.objects.all()
-        serializer = ProductSerializer(products, many=True)
+            serializer = ProductSerializer(
+                products, many=True
+            )  # Use original serializer if not needed
+
         Log.objects.create(username=request.user.username, action="Viewed all products")
         return Response(serializer.data)
 
@@ -510,6 +536,26 @@ class ProductDetailView(APIView):
                 Log.objects.create(
                     username=request.user.username,
                     action=f"Updated product {product.product_name}",
+                )
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Product.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request, product_id):
+        """
+        Partially update a product. Only the fields provided in the request will be updated.
+        """
+        try:
+            product = Product.objects.get(product_id=product_id)
+            serializer = ProductSerializer(
+                product, data=request.data, partial=True
+            )  # `partial=True` allows partial updates
+            if serializer.is_valid():
+                serializer.save()
+                Log.objects.create(
+                    username=request.user.username,
+                    action=f"Partially updated product {product.product_name}",
                 )
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
