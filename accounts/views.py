@@ -30,6 +30,26 @@ RPI_IP = "192.168.254.183"
 RPI_PORT = 8001  # Use port 8001 to connect to the print server
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def validate_session(request):
+    user = request.user
+    if user.is_authenticated:
+        # Return relevant user details
+        return Response(
+            {
+                "firstName": user.first_name,
+                "lastName": user.last_name,
+                "email": user.email,
+                "phoneNumber": user.phone_number,
+                "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
+    else:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
 @api_view(["POST"])
 def print_receipt(request):
     try:

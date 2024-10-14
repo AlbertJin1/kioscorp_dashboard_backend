@@ -21,10 +21,12 @@ from .views import (
     update_profile_picture,
     get_profile_picture,
     print_receipt,
+    validate_session,
 )
 
 
 urlpatterns = [
+    path("api/validate-session/", validate_session, name="validate_session"),
     path("api/register/", register, name="register"),
     path("api/register-owner/", register_owner, name="register_owner"),
     path("api/login/", login, name="login"),
