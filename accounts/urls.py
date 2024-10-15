@@ -22,6 +22,7 @@ from .views import (
     get_profile_picture,
     print_receipt,
     validate_session,
+    get_profile_picture_admin,
 )
 
 
@@ -61,6 +62,11 @@ urlpatterns = [
     ),
     path("api/profile-picture/", get_profile_picture, name="get_profile_picture"),
     path("api/print-receipt/", print_receipt, name="print_receipt"),
+    path(
+        "api/users/<int:user_id>/profile-picture/",
+        get_profile_picture_admin,
+        name="get_profile_picture_admin",
+    ),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

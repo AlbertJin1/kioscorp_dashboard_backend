@@ -12,7 +12,7 @@ from .serializers import (
     ProductWithSubCategorySerializer,
 )
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import IsOwnerOrAdmin
 from rest_framework.views import APIView
 from django.utils import timezone
@@ -28,26 +28,6 @@ import os
 # FOR PRINTING IN KIOSK
 RPI_IP = "192.168.254.183"
 RPI_PORT = 8001  # Use port 8001 to connect to the print server
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def validate_session(request):
-    user = request.user
-    if user.is_authenticated:
-        # Return relevant user details
-        return Response(
-            {
-                "firstName": user.first_name,
-                "lastName": user.last_name,
-                "email": user.email,
-                "phoneNumber": user.phone_number,
-                "role": user.role,
-            },
-            status=status.HTTP_200_OK,
-        )
-    else:
-        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 @api_view(["POST"])
@@ -76,6 +56,26 @@ def print_receipt(request):
             {"success": False, "message": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def validate_session(request):
+    user = request.user
+    if user.is_authenticated:
+        # Return relevant user details
+        return Response(
+            {
+                "firstName": user.first_name,
+                "lastName": user.last_name,
+                "email": user.email,
+                "phoneNumber": user.phone_number,
+                "role": user.role,
+            },
+            status=status.HTTP_200_OK,
+        )
+    else:
+        return Response({"error": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class LogView(APIView):
@@ -108,7 +108,9 @@ class LogView(APIView):
         return Response(status=204)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def register(request):
     request.data["role"] = "employee"  # Set role to Employee by default
 
@@ -123,7 +125,9 @@ def register(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def register_owner(request):
     if request.data.get("secretPasskey") != "Practice?Noon?Along?Direct0?Must":
         return Response(
@@ -146,7 +150,9 @@ def register_owner(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@permission_classes([AllowAny])  # Ensure login doesn't require authentication
 def login(request):
     username = request.data.get("username")
     password = request.data.get("password")
@@ -245,6 +251,24 @@ def get_profile_picture(request):
             },
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated, IsOwnerOrAdmin]
+)  # Only admins or owners can access
+def get_profile_picture_admin(request, user_id):
+    try:
+        user = CustomUser.objects.get(id=user_id)
+        if user.profile_picture:
+            return HttpResponse(user.profile_picture, content_type="image/jpeg")
+        else:
+            return Response(
+                {"error": "No profile picture available."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    except CustomUser.DoesNotExist:
+        return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["PUT"])
@@ -563,9 +587,6 @@ class ProductDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
     def patch(self, request, product_id):
-        """
-        Partially update a product. Only the fields provided in the request will be updated.
-        """
         try:
             product = Product.objects.get(product_id=product_id)
             serializer = ProductSerializer(
