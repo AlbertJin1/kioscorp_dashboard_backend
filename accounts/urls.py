@@ -23,6 +23,7 @@ from .views import (
     print_receipt,
     validate_session,
     get_profile_picture_admin,
+    FeedbackCreateView,
 )
 
 
@@ -67,6 +68,7 @@ urlpatterns = [
         get_profile_picture_admin,
         name="get_profile_picture_admin",
     ),
+    path('api/feedback/', FeedbackCreateView.as_view(), name='feedback-create'),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

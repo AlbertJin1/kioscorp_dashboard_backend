@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import CustomUser, Log, MainCategory, SubCategory, Product
+from .models import CustomUser, Log, MainCategory, SubCategory, Product, Feedback
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -136,4 +136,16 @@ class ProductWithSubCategorySerializer(serializers.ModelSerializer):
             "product_added",
             "sub_category",  # Ensure this is included
             "product_sold",
+        ]
+
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
+        fields = [
+            "feedback_id",
+            "order_id",
+            "feedback_rating",
+            "feedback_satisfaction",
+            "feedback_date",
         ]

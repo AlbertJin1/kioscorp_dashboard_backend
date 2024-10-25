@@ -2,7 +2,16 @@ from django.contrib.auth import authenticate, logout as django_logout
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from .models import CustomUser, Log, MainCategory, SubCategory, Product
+from .models import (
+    CustomUser,
+    Log,
+    MainCategory,
+    SubCategory,
+    Product,
+    Order,
+    OrderItem,
+    Customer,
+)
 from .serializers import (
     UserSerializer,
     LogSerializer,
@@ -10,6 +19,7 @@ from .serializers import (
     SubCategorySerializer,
     ProductSerializer,
     ProductWithSubCategorySerializer,
+    FeedbackSerializer,
 )
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -30,10 +40,47 @@ RPI_IP = "192.168.254.183"
 RPI_PORT = 8001  # Use port 8001 to connect to the print server
 
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.http import JsonResponse
+import socket
+import json
+
+
 @api_view(["POST"])
 def print_receipt(request):
     try:
         print_data = request.data
+
+        # Create a new Customer instance (you may want to customize this)
+        customer = Customer.objects.create()
+
+        # Create a new Order instance
+        order = Order.objects.create(
+            customer=customer,
+            order_amount=print_data["total"],
+            order_status="Pending",
+        )
+
+        # Create a new OrderItem instance for each product in the cart
+        for item in print_data["items"]:
+            try:
+                product = Product.objects.get(product_id=item["product"]["product_id"])
+                OrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    product_price=item["product"]["product_price"],
+                    order_item_quantity=item["quantity"],
+                )
+            except Product.DoesNotExist:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "message": f"Error: Product with ID {item['product']['product_id']} does not exist.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         # Create a socket connection to the Raspberry Pi
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -42,8 +89,13 @@ def print_receipt(request):
             response = s.recv(1024).decode("utf-8")
 
         if "completed successfully" in response:
+            # Return the order_id along with success message
             return JsonResponse(
-                {"success": True, "message": "Print job sent successfully"}
+                {
+                    "success": True,
+                    "message": "Print job sent successfully",
+                    "order_id": order.order_id,  # Include the order_id in the response
+                }
             )
         else:
             return JsonResponse(
@@ -617,3 +669,12 @@ class ProductDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Product.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+class FeedbackCreateView(APIView):
+    def post(self, request):
+        serializer = FeedbackSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

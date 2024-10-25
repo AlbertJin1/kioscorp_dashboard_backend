@@ -60,6 +60,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Frontend URL
     "http://localhost:3001",
     "http://localhost:3002",
+    "http://localhost:3003",
 ]
 
 # Django REST Framework configuration
