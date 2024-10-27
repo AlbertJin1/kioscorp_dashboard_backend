@@ -17,7 +17,7 @@ class CustomUser(AbstractUser):
     ROLE_CHOICES = (
         ("owner", "Owner"),
         ("admin", "Admin"),
-        ("employee", "Employee"),
+        ("cashier", "Cashier"),  # Change from "employee" to "cashier"
     )
 
     # Additional fields
@@ -26,7 +26,9 @@ class CustomUser(AbstractUser):
     )
     phone_number = models.CharField(max_length=15, blank=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="employee")
+    role = models.CharField(
+        max_length=10, choices=ROLE_CHOICES, default="cashier"
+    )  # Change default to "cashier"
     profile_picture = models.ImageField(
         upload_to="user_profile/", blank=True, null=True
     )

@@ -20,6 +20,7 @@ from .serializers import (
     ProductSerializer,
     ProductWithSubCategorySerializer,
     FeedbackSerializer,
+    OrderSerializer,
 )
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -82,7 +83,8 @@ def print_receipt(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Create a socket connection to the Raspberry Pi
+        # Send the print data to the Raspberry Pi, including the order_id
+        print_data["order_id"] = order.order_id  # Add order_id to print_data
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((RPI_IP, RPI_PORT))
             s.sendall(json.dumps(print_data).encode("utf-8"))
@@ -164,7 +166,7 @@ class LogView(APIView):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request):
-    request.data["role"] = "employee"  # Set role to Employee by default
+    request.data["role"] = "cashier"  # Set role to Employee by default
 
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
@@ -678,3 +680,46 @@ class FeedbackCreateView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@csrf_exempt
+@api_view(["POST"])
+@permission_classes([AllowAny])  # Allow any user to access this endpoint
+def reset_password(request):
+    username = request.data.get("username")
+    new_password = request.data.get("newPassword")
+
+    try:
+        user = CustomUser.objects.get(username=username)
+        user.set_password(new_password)
+        user.save()
+        Log.objects.create(
+            username=username, action=f"Reset password for {username}"
+        )  # Log the action for the user being reset
+        return Response(
+            {"success": f"Password for {username} has been reset."},
+            status=status.HTTP_200_OK,
+        )
+    except CustomUser.DoesNotExist:
+        return Response({"error": "User  not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class PendingOrdersView(APIView):
+    def get(self, request):
+        pending_orders = Order.objects.filter(order_status="Pending")
+        serializer = OrderSerializer(pending_orders, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class VoidOrderView(APIView):
+    def patch(self, request, order_id):
+        try:
+            order = Order.objects.get(order_id=order_id)
+            order.order_status = "Void"  # Update the order status to "Void"
+            order.save()  # Save the changes
+            return Response(
+                {"message": "Order successfully voided."}, status=status.HTTP_200_OK
+            )
+        except Order.DoesNotExist:
+            return Response(
+                {"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND
+            )

@@ -24,6 +24,9 @@ from .views import (
     validate_session,
     get_profile_picture_admin,
     FeedbackCreateView,
+    PendingOrdersView,
+    VoidOrderView,
+    reset_password,
 )
 
 
@@ -68,7 +71,10 @@ urlpatterns = [
         get_profile_picture_admin,
         name="get_profile_picture_admin",
     ),
-    path('api/feedback/', FeedbackCreateView.as_view(), name='feedback-create'),
+    path("api/feedback/", FeedbackCreateView.as_view(), name="feedback-create"),
+    path("api/orders/pending/", PendingOrdersView.as_view(), name="pending-orders"),
+    path("api/orders/void/<int:order_id>/", VoidOrderView.as_view(), name="void-order"),
+    path("api/reset-password/", reset_password, name="reset_password"),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
