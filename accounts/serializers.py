@@ -161,9 +161,10 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(
-        source="product.product_name", read_only=True
-    )  # Include product name
+    product_name = serializers.CharField(source="product.product_name", read_only=True)
+    product_image = serializers.ImageField(
+        source="product.product_image", read_only=True
+    )  # Include product image
 
     class Meta:
         model = OrderItem
@@ -173,6 +174,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "product_price",
             "order_item_quantity",
             "product_name",
+            "product_image",  # Add product_image to fields
         ]
 
 
