@@ -41,14 +41,6 @@ RPI_IP = "192.168.254.183"
 RPI_PORT = 8001  # Use port 8001 to connect to the print server
 
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from django.http import JsonResponse
-import socket
-import json
-
-
 @api_view(["POST"])
 def print_receipt(request):
     try:
@@ -107,6 +99,55 @@ def print_receipt(request):
     except Exception as e:
         print(f"Error in print_receipt: {str(e)}")
         return JsonResponse(
+            {"success": False, "message": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def create_order(request):
+    try:
+        order_data = request.data
+
+        # Create a new Customer instance (you may want to customize this)
+        customer = Customer.objects.create()
+
+        # Create a new Order instance
+        order = Order.objects.create(
+            customer=customer,
+            order_amount=order_data["total"],
+            order_status="Pending",
+        )
+
+        # Create a new OrderItem instance for each product in the cart
+        for item in order_data["items"]:
+            try:
+                product = Product.objects.get(product_id=item["product"]["product_id"])
+                OrderItem.objects.create(
+                    order=order,
+                    product=product,
+                    product_price=item["product"]["product_price"],
+                    order_item_quantity=item["quantity"],
+                )
+            except Product.DoesNotExist:
+                return Response(
+                    {
+                        "success": False,
+                        "message": f"Error: Product with ID {item['product']['product_id']} does not exist.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Order created successfully.",
+                "order_id": order.order_id,  # Include the order_id in the response
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    except Exception as e:
+        return Response(
             {"success": False, "message": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
@@ -680,6 +721,7 @@ class FeedbackCreateView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 @csrf_exempt
 @api_view(["POST"])
