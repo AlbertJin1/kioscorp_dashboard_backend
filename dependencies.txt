@@ -1,6 +1,8 @@
+# INSTALL FIRST
+pip install django
+python -m pip install Pillow
 pip install django-cors-headers
 pip install djangorestframework
-
 
 # to run
 python manage.py runserver
@@ -10,6 +12,3 @@ python manage.py makemigrations
 
 # Apply migrations
 python manage.py migrate
-
-# FOR ImageField
-python -m pip install Pillow
