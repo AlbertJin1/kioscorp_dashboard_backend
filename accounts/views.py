@@ -33,6 +33,10 @@ import socket
 import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+import subprocess
+from decimal import Decimal
+from django.db import transaction
+import win32print
 import os
 
 
@@ -46,56 +50,68 @@ def print_receipt(request):
     try:
         print_data = request.data
 
-        # Create a new Customer instance (you may want to customize this)
-        customer = Customer.objects.create()
+        # Start a transaction
+        with transaction.atomic():
+            # Create a new Customer instance (you may want to customize this)
+            customer = Customer.objects.create()
 
-        # Create a new Order instance
-        order = Order.objects.create(
-            customer=customer,
-            order_amount=print_data["total"],
-            order_status="Pending",
-        )
+            # Count the number of pending orders to determine the queue number
+            pending_count = Order.objects.filter(order_status="Pending").count()
+            queue_number = pending_count + 1  # This new order will be the next in line
 
-        # Create a new OrderItem instance for each product in the cart
-        for item in print_data["items"]:
-            try:
-                product = Product.objects.get(product_id=item["product"]["product_id"])
-                OrderItem.objects.create(
-                    order=order,
-                    product=product,
-                    product_price=item["product"]["product_price"],
-                    order_item_quantity=item["quantity"],
-                )
-            except Product.DoesNotExist:
+            # Create a new Order instance
+            order = Order.objects.create(
+                customer=customer,
+                order_amount=print_data["total"],
+                order_status="Pending",
+            )
+
+            # Create a new OrderItem instance for each product in the cart
+            for item in print_data["items"]:
+                try:
+                    product = Product.objects.get(
+                        product_id=item["product"]["product_id"]
+                    )
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        product_price=item["product"]["product_price"],
+                        order_item_quantity=item["quantity"],
+                    )
+                except Product.DoesNotExist:
+                    return JsonResponse(
+                        {
+                            "success": False,
+                            "message": f"Error: Product with ID {item['product']['product_id']} does not exist.",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Send the print data to the Raspberry Pi, including the order_id, order_status, and queue_number
+            print_data["order_id"] = order.order_id  # Add order_id to print_data
+            print_data["order_status"] = (
+                order.order_status
+            )  # Add order_status to print_data
+            print_data["queue_number"] = queue_number  # Add queue_number to print_data
+
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((RPI_IP, RPI_PORT))
+                s.sendall(json.dumps(print_data).encode("utf-8"))
+                response = s.recv(1024).decode("utf-8")
+
+            if "completed successfully" in response:
+                # Return the order_id along with success message
                 return JsonResponse(
                     {
-                        "success": False,
-                        "message": f"Error: Product with ID {item['product']['product_id']} does not exist.",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
+                        "success": True,
+                        "message": "Print job sent successfully",
+                        "order_id": order.order_id,  # Include the order_id in the response
+                    }
                 )
+            else:
+                # If printing fails, raise an exception to trigger rollback
+                raise Exception("Printing failed: " + response)
 
-        # Send the print data to the Raspberry Pi, including the order_id
-        print_data["order_id"] = order.order_id  # Add order_id to print_data
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((RPI_IP, RPI_PORT))
-            s.sendall(json.dumps(print_data).encode("utf-8"))
-            response = s.recv(1024).decode("utf-8")
-
-        if "completed successfully" in response:
-            # Return the order_id along with success message
-            return JsonResponse(
-                {
-                    "success": True,
-                    "message": "Print job sent successfully",
-                    "order_id": order.order_id,  # Include the order_id in the response
-                }
-            )
-        else:
-            return JsonResponse(
-                {"success": False, "message": response},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
     except Exception as e:
         print(f"Error in print_receipt: {str(e)}")
         return JsonResponse(
@@ -123,12 +139,25 @@ def create_order(request):
         for item in order_data["items"]:
             try:
                 product = Product.objects.get(product_id=item["product"]["product_id"])
+
+                # Check if there is enough stock for the requested quantity
+                if product.product_quantity < item["quantity"]:
+                    return Response(
+                        {
+                            "success": False,
+                            "message": f"Error: Insufficient stock for {product.product_name}. Available: {product.product_quantity}, Required: {item['quantity']}.",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Create the OrderItem instance if stock is sufficient
                 OrderItem.objects.create(
                     order=order,
                     product=product,
                     product_price=item["product"]["product_price"],
                     order_item_quantity=item["quantity"],
                 )
+
             except Product.DoesNotExist:
                 return Response(
                     {
@@ -765,3 +794,165 @@ class VoidOrderView(APIView):
             return Response(
                 {"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND
             )
+
+
+def is_printer_ready(printer_name):
+    try:
+        hprinter = win32print.OpenPrinter(printer_name)
+        printer_info = win32print.GetPrinter(hprinter, 2)
+        win32print.ClosePrinter(hprinter)
+
+        # Check if the printer is ready
+        status = printer_info["Status"]
+        print(f"Printer status code: {status}")
+
+        # Check for printer statuses
+        if status == 0:  # 0 indicates the printer is ready
+            return True
+        elif (
+            status & win32print.PRINTER_STATUS_OFFLINE
+        ):  # Check if the printer is offline
+            print("Printer is offline.")
+            return False
+        elif status in (
+            1,
+            2,
+            3,
+            4,
+            5,
+        ):  # 1: paused, 2: error, 3: pending deletion, 4: paper jam, 5: other errors
+            print("Printer is not ready or has an issue.")
+            return False
+        else:
+            print("Printer is in an unknown state.")
+            return False
+    except Exception as e:
+        print(f"Error checking printer status: {str(e)}")
+        return False
+
+
+@api_view(["PATCH"])
+def pay_order(request, order_id):
+    try:
+        # Check if the printer is ready before processing the payment
+        printer_name = "POS58 v9"  # Replace with your actual printer name
+        if not is_printer_ready(printer_name):
+            return Response(
+                {"error": "Printer is not ready. Please check the printer connection."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Proceed to get the order only if the printer is ready
+        order = Order.objects.get(order_id=order_id)
+
+        # Check stock availability before processing the payment
+        for item in order.orderitem_set.all():
+            product = item.product
+            if product.product_quantity < item.order_item_quantity:
+                return Response(
+                    {
+                        "error": f"Insufficient stock for {product.product_name}. Available: {product.product_quantity}, Required: {item.order_item_quantity}.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        amount_given = request.data.get("order_paid_amount")
+
+        # Convert amount_given to Decimal
+        amount_given = Decimal(amount_given)
+
+        total_amount = order.order_amount
+        change = amount_given - total_amount
+
+        if change < 0:
+            return Response(
+                {"error": "Insufficient amount provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update the order details only if the printer is ready
+        order.order_status = "Paid"
+        order.order_paid_amount = amount_given
+        order.order_change = change
+        order.save()
+
+        # Update product quantities and sold counts
+        for item in order.orderitem_set.all():
+            product = item.product
+            product.product_quantity -= item.order_item_quantity  # Decrease quantity
+            product.product_sold += item.order_item_quantity  # Increase sold count
+            product.save()  # Save the updated product
+
+        # Prepare data for printing
+        print_data = {
+            "items": [
+                {
+                    "product": {
+                        "product_id": item.product.product_id,
+                        "product_name": item.product.product_name,
+                        "product_price": float(item.product.product_price),
+                    },
+                    "quantity": item.order_item_quantity,
+                }
+                for item in order.orderitem_set.all()
+            ],
+            "total": float(total_amount),
+            "order_id": order.order_id,
+            "order_status": order.order_status,
+            "paid_amount": float(amount_given),
+            "change": float(change),
+        }
+
+        # Send print data to the print receipt function
+        print_receiptPOS(print_data)
+
+        return Response(
+            {"success": "Order successfully paid.", "order_id": order.order_id},
+            status=status.HTTP_200_OK,
+        )
+
+    except Order.DoesNotExist:
+        return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def convert_decimals_to_floats(data):
+    if isinstance(data, dict):
+        return {key: convert_decimals_to_floats(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [convert_decimals_to_floats(item) for item in data]
+    elif isinstance(data, Decimal):
+        return float(data)  # Convert Decimal to float
+    return data
+
+
+def print_receiptPOS(print_data):
+    # Prepare to print the receipt using the local print_receiptPOS script
+    try:
+        # Convert Decimal values to float
+        print_data = convert_decimals_to_floats(print_data)
+
+        # Convert print_data to JSON string for passing to the print script
+        print_data_json = json.dumps(print_data)
+
+        # Define the full path to the print_receiptPOS.py script
+        script_path = r"C:\Users\awsom\Documents\GitHub\kioscorp_dashboard_backend\accounts\print_receiptPOS.py"
+
+        # Call the print script with the print data as an argument
+        process = subprocess.Popen(
+            ["python", script_path, print_data_json],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        # Wait for the process to complete and get the output
+        stdout, stderr = process.communicate()
+
+        if process.returncode == 0:
+            return True  # Printing was successful
+        else:
+            raise Exception(f"Printing failed: {stderr.decode('utf-8')}")
+
+    except Exception as e:
+        raise Exception(f"Error in print_receiptPOS: {str(e)}")

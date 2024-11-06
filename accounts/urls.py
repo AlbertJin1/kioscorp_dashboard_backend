@@ -28,6 +28,7 @@ from .views import (
     VoidOrderView,
     reset_password,
     create_order,
+    pay_order,
 )
 
 
@@ -77,6 +78,7 @@ urlpatterns = [
     path("api/orders/void/<int:order_id>/", VoidOrderView.as_view(), name="void-order"),
     path("api/reset-password/", reset_password, name="reset_password"),
     path("api/create-order/", create_order, name="create_order"),
+    path("api/orders/pay/<int:order_id>/", pay_order, name="pay_order"),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -165,6 +165,10 @@ class Order(models.Model):
     order_status = models.CharField(
         max_length=10, choices=ORDER_STATUS_CHOICES, default="Pending"
     )
+    order_paid_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00
+    )
+    order_change = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     def save(self, *args, **kwargs):
         if not self.order_id:

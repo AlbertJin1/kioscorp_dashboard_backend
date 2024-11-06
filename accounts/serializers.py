@@ -188,6 +188,8 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             "order_id",
             "order_amount",
+            "order_paid_amount",  # Include the new fields
+            "order_change",
             "order_date_created",
             "order_status",
             "order_items",

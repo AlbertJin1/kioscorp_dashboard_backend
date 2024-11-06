@@ -16,7 +16,6 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
@@ -28,9 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
 # Application definition
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -67,12 +64,10 @@ CORS_ALLOWED_ORIGINS = [
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
-        # Add SessionAuthentication to handle unauthenticated requests like registration
         "rest_framework.authentication.SessionAuthentication",
-        'accounts.authentication.CustomTokenAuthentication',
+        "accounts.authentication.CustomTokenAuthentication",
     ],
 }
-
 
 # Custom User Model
 AUTH_USER_MODEL = "accounts.CustomUser"
@@ -97,7 +92,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "kioscorp_dashboard_backend.wsgi.application"
 
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
@@ -107,7 +101,6 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -127,7 +120,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
@@ -138,7 +130,6 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
@@ -152,3 +143,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 MEDIA_URL = "/media/"
+
+# Backup settings
+BACKUP_INTERVAL_MINUTES = 30  # Interval in minutes between backups
+MAX_BACKUP_FILES = 5  # Maximum number of backup files to keep
+BACKUP_DIR = os.path.join(BASE_DIR, "backups")  # Directory to save backups
+
+# Ensure the backup directory exists
+os.makedirs(BACKUP_DIR, exist_ok=True)

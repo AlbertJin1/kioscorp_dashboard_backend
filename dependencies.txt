@@ -3,6 +3,10 @@ pip install django
 python -m pip install Pillow
 pip install django-cors-headers
 pip install djangorestframework
+pip install pywin32
+pip install requests
+pip install celery redis
+pip install django-celery-beat
 
 # to run
 python manage.py runserver
