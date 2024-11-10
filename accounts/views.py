@@ -11,6 +11,7 @@ from .models import (
     Order,
     OrderItem,
     Customer,
+    Feedback,
 )
 from .serializers import (
     UserSerializer,
@@ -21,6 +22,8 @@ from .serializers import (
     ProductWithSubCategorySerializer,
     FeedbackSerializer,
     OrderSerializer,
+    SalesDataSerializer,
+    OrderItemHistorySerializer,
 )
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -38,6 +41,11 @@ from decimal import Decimal
 from django.db import transaction
 import win32print
 import os
+from django.db.models import Count
+from django.db.models.functions import ExtractMonth
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
+from django.utils.dateparse import parse_date
 
 
 # FOR PRINTING IN KIOSK
@@ -956,3 +964,302 @@ def print_receiptPOS(print_data):
 
     except Exception as e:
         raise Exception(f"Error in print_receiptPOS: {str(e)}")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])  # Require authentication
+def order_counts(request):
+    total_paid_orders = Order.objects.filter(order_status="Paid").count()
+    total_pending_orders = Order.objects.filter(order_status="Pending").count()
+    total_void_orders = Order.objects.filter(
+        order_status="Void"
+    ).count()  # Add this line
+
+    return Response(
+        {
+            "totalPaidOrders": total_paid_orders,
+            "totalPendingOrders": total_pending_orders,
+            "totalVoidOrders": total_void_orders,  # Add this line
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])  # Require authentication for this endpoint
+def satisfaction_overview(request):
+    # Aggregate satisfaction ratings
+    satisfaction_counts = Feedback.objects.values("feedback_satisfaction").annotate(
+        count=Count("feedback_satisfaction")
+    )
+
+    # Prepare the response data
+    satisfaction_data = {
+        satisfaction["feedback_satisfaction"]: satisfaction["count"]
+        for satisfaction in satisfaction_counts
+    }
+
+    return Response(satisfaction_data)
+
+
+class CustomerCountByMonthView(APIView):
+    @permission_classes([IsAuthenticated])
+    def get(self, request):
+        # Get the current year
+        current_year = timezone.now().year
+
+        # Query to count customers grouped by month
+        customer_counts = (
+            Customer.objects.filter(date_created__year=current_year)
+            .annotate(month=ExtractMonth("date_created"))
+            .values("month")
+            .annotate(count=Count("customer_id"))
+            .order_by("month")
+        )
+
+        # Prepare the response data
+        data = {month: count for month, count in enumerate([0] * 12)}
+        for entry in customer_counts:
+            data[entry["month"] - 1] = entry["count"]  # Month is 1-indexed
+
+        return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def top_selling_products(request):
+    current_year = timezone.now().year
+    monthly_top_products = []
+
+    # Loop through each month (1-12)
+    for month in range(1, 13):
+        # Get total quantity sold for each product in this month, filter by minimum total_sold, and limit to 7 results
+        monthly_sales = (
+            OrderItem.objects.filter(
+                order__order_date_created__year=current_year,
+                order__order_date_created__month=month,
+            )
+            .values("product_id")
+            .annotate(total_sold=Sum("order_item_quantity"))
+            .filter(total_sold__gte=10)  # Only include products with total_sold >= 10
+            .order_by("-total_sold")[:7]  # Limit to top 7 results
+        )
+
+        for product_data in monthly_sales:
+            product_details = Product.objects.get(pk=product_data["product_id"])
+            monthly_top_products.append(
+                {
+                    "product_id": product_details.product_id,
+                    "product_name": product_details.product_name,
+                    "product_image": request.build_absolute_uri(
+                        product_details.product_image.url
+                    ),
+                    "product_type": product_details.product_type,  # Include product type
+                    "product_size": product_details.product_size,  # Include product size
+                    "top_selling_month": timezone.datetime(
+                        current_year, month, 1
+                    ).strftime(
+                        "%B"
+                    ),  # Display month name
+                    "total_sold": product_data["total_sold"],
+                }
+            )
+
+    return Response(monthly_top_products)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def low_selling_products(request):
+    current_year = timezone.now().year
+    monthly_low_products = []
+
+    # Loop through each month (1-12)
+    for month in range(1, 13):
+        # Get total quantity sold for each product in this month, filter by maximum total_sold, and limit to 7 results
+        monthly_sales = (
+            OrderItem.objects.filter(
+                order__order_date_created__year=current_year,
+                order__order_date_created__month=month,
+            )
+            .values("product_id")
+            .annotate(total_sold=Sum("order_item_quantity"))
+            .filter(total_sold__lt=10)  # Only include products with total_sold < 10
+            .order_by("total_sold")[:7]  # Limit to bottom 7 results (lowest sold)
+        )
+
+        for product_data in monthly_sales:
+            product_details = Product.objects.get(pk=product_data["product_id"])
+            monthly_low_products.append(
+                {
+                    "product_id": product_details.product_id,
+                    "product_name": product_details.product_name,
+                    "product_image": request.build_absolute_uri(
+                        product_details.product_image.url
+                    ),
+                    "product_type": product_details.product_type,  # Include product type
+                    "product_size": product_details.product_size,  # Include product size
+                    "low_selling_month": timezone.datetime(
+                        current_year, month, 1
+                    ).strftime(
+                        "%B"
+                    ),  # Display month name
+                    "total_sold": product_data["total_sold"],
+                }
+            )
+
+    return Response(monthly_low_products)
+
+
+@api_view(["GET"])
+def get_sales_data(request):
+    today = timezone.now().date()
+    current_year = timezone.now().year
+
+    # Calculate daily sales for orders with status "Paid"
+    daily_sales = (
+        Order.objects.filter(
+            order_date_created__date=today, order_status="Paid"
+        ).aggregate(total=Sum("order_amount"))["total"]
+        or 0
+    )
+
+    # Calculate annual sales for orders with status "Paid"
+    annual_sales = (
+        Order.objects.filter(
+            order_date_created__year=current_year, order_status="Paid"
+        ).aggregate(total=Sum("order_amount"))["total"]
+        or 0
+    )
+
+    # Create response data
+    sales_data = {
+        "daily_sales": daily_sales,
+        "annual_sales": annual_sales,
+    }
+
+    serializer = SalesDataSerializer(data=sales_data)
+    serializer.is_valid(raise_exception=True)
+
+    return Response(serializer.data)
+
+
+def get_paid_orders_by_month():
+    # Get the current month and year
+    current_year = timezone.now().year
+    current_month = timezone.now().month
+
+    # Query orders with "Paid" status, grouped by month
+    paid_orders = (
+        Order.objects.filter(
+            order_status="Paid",
+            order_date_created__year=current_year,
+            order_date_created__month=current_month,
+        )
+        .annotate(month=TruncMonth("order_date_created"))
+        .values("month")
+        .annotate(total_orders=Count("order_id"), total_amount=Sum("order_amount"))
+        .order_by("month")
+    )
+
+    return paid_orders
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def order_history(request):
+    status_filter = request.GET.get("status", "all")
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+    order_number = request.GET.get("order_number")
+
+    # Apply filtering based on order status and order by date in descending order
+    orders = Order.objects.all().order_by("-order_date_created")
+
+    if status_filter != "all":
+        status_map = {"completed": "Paid", "pending": "Pending", "cancelled": "Void"}
+        orders = orders.filter(order_status=status_map.get(status_filter, ""))
+
+    if start_date:
+        orders = orders.filter(order_date_created__date__gte=parse_date(start_date))
+
+    if end_date:
+        orders = orders.filter(order_date_created__date__lte=parse_date(end_date))
+
+    if order_number:
+        orders = orders.filter(order_id__icontains=order_number)
+
+    # Group items by order_id
+    grouped_orders = []
+    for order in orders:
+        items = []
+        for item in order.orderitem_set.all():
+            product_image_url = (
+                request.build_absolute_uri(item.product.product_image.url)
+                if item.product.product_image
+                else None
+            )
+            items.append(
+                {
+                    "product_image": product_image_url,
+                    "product_name": item.product.product_name,
+                    "product_size": item.product.product_size,  # Include product_size here
+                    "date_created": order.order_date_created,
+                    "status": order.order_status,
+                    "unit_price": float(item.product_price),
+                    "quantity": item.order_item_quantity,
+                }
+            )
+
+        grouped_orders.append(
+            {
+                "order_id": order.order_id,
+                "items": items,
+            }
+        )
+
+    return Response(grouped_orders, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def monthly_sales(request):
+    current_year = timezone.now().year
+    monthly_sales_data = (
+        Order.objects.filter(order_status="Paid", order_date_created__year=current_year)
+        .annotate(month=ExtractMonth("order_date_created"))
+        .values("month")
+        .annotate(total_sales=Sum("order_amount"))
+        .order_by("month")
+    )
+
+    # Prepare data for response
+    sales_data = {month: 0 for month in range(1, 13)}  # Initialize all months to 0
+    for entry in monthly_sales_data:
+        sales_data[entry["month"]] = entry["total_sales"]
+
+    return Response(sales_data)
+
+
+from django.db.models import Sum
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_by_category(request):
+    # Get sales data for orders with status "Paid"
+    sales_data = (
+        OrderItem.objects.filter(order__order_status="Paid")
+        .values("product__sub_category__main_category__main_category_name")
+        .annotate(total_sales=Sum("product_price"))
+    )
+
+    # Prepare response data
+    response_data = {
+        entry["product__sub_category__main_category__main_category_name"]: entry[
+            "total_sales"
+        ]
+        for entry in sales_data
+    }
+
+    return Response(response_data)

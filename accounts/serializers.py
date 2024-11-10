@@ -194,3 +194,35 @@ class OrderSerializer(serializers.ModelSerializer):
             "order_status",
             "order_items",
         ]
+
+
+class SalesDataSerializer(serializers.Serializer):
+    daily_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+    annual_sales = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class OrderItemHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.product_name")
+    product_size = serializers.CharField(source="product.product_size")  # Add this line
+    product_image = serializers.SerializerMethodField()
+    unit_price = serializers.FloatField(
+        source="product_price"
+    )  # Ensure unit_price is a float
+    quantity = serializers.IntegerField(source="order_item_quantity")
+    date_created = serializers.DateTimeField(source="order.order_date_created")
+    status = serializers.CharField(source="order.order_status")
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            "product_name",
+            "product_size",  # Include product_size in fields
+            "product_image",
+            "unit_price",
+            "quantity",
+            "date_created",
+            "status",
+        ]
+
+    def get_product_image(self, obj):
+        return obj.product.product_image.url if obj.product.product_image else None
