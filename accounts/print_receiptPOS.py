@@ -42,6 +42,18 @@ win32print.WritePrinter(hprinter, f"{header3}\n".encode("utf-8"))
 for _ in range(2):
     win32print.WritePrinter(hprinter, b"\n")
 
+# Print cashier name
+cashier = print_data.get("cashier", "Unknown Cashier")
+win32print.WritePrinter(hprinter, f"Cashier: {cashier}\n".encode("utf-8"))
+
+# Add the POS system information
+pos_system = "POS: KiosCorp POS"
+win32print.WritePrinter(hprinter, f"{pos_system}\n".encode("utf-8"))
+
+for _ in range(1):
+    win32print.WritePrinter(hprinter, b"\n")
+
+# Continue with the order details
 order_id = print_data.get("order_id", "Unknown Order ID")
 order_status = print_data.get("order_status", "Unknown Status")
 paid_amount = print_data.get("paid_amount", 0.0)

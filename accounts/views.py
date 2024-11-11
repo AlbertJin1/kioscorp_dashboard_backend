@@ -865,8 +865,6 @@ def pay_order(request, order_id):
                 )
 
         amount_given = request.data.get("order_paid_amount")
-
-        # Convert amount_given to Decimal
         amount_given = Decimal(amount_given)
 
         total_amount = order.order_amount
@@ -891,6 +889,10 @@ def pay_order(request, order_id):
             product.product_sold += item.order_item_quantity  # Increase sold count
             product.save()  # Save the updated product
 
+        # Get the logged-in user's name
+        user = request.user
+        cashier_name = f"{user.first_name} {user.last_name}"
+
         # Prepare data for printing
         print_data = {
             "items": [
@@ -909,6 +911,7 @@ def pay_order(request, order_id):
             "order_status": order.order_status,
             "paid_amount": float(amount_given),
             "change": float(change),
+            "cashier": cashier_name,  # Add cashier's name here
         }
 
         # Send print data to the print receipt function
@@ -936,7 +939,6 @@ def convert_decimals_to_floats(data):
 
 
 def print_receiptPOS(print_data):
-    # Prepare to print the receipt using the local print_receiptPOS script
     try:
         # Convert Decimal values to float
         print_data = convert_decimals_to_floats(print_data)
@@ -944,8 +946,8 @@ def print_receiptPOS(print_data):
         # Convert print_data to JSON string for passing to the print script
         print_data_json = json.dumps(print_data)
 
-        # Define the full path to the print_receiptPOS.py script
-        script_path = r"C:\Users\awsom\Documents\GitHub\kioscorp_dashboard_backend\accounts\print_receiptPOS.py"
+        # Define the relative path to the print_receiptPOS.py script
+        script_path = os.path.join(os.path.dirname(__file__), "print_receiptPOS.py")
 
         # Call the print script with the print data as an argument
         process = subprocess.Popen(
