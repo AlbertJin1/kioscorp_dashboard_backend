@@ -5,22 +5,33 @@ import requests
 from datetime import datetime
 
 
-def get_philippines_time():
-    response = requests.get("http://worldtimeapi.org/api/timezone/Asia/Manila")
-    if response.status_code == 200:
-        return response.json()["datetime"]
-    else:
-        return "Could not get time"
+def get_philippines_time(fallback_time=None):
+    try:
+        response = requests.get("http://worldtimeapi.org/api/timezone/Asia/Manila")
+        if response.status_code == 200:
+            return response.json()["datetime"]
+    except:
+        pass  # Continue to fallback if any issue occurs
+
+    # If online time is unavailable, use the fallback time if provided
+    return fallback_time if fallback_time else "Could not get time"
 
 
+# Ensure print_data is passed as an argument
 if len(sys.argv) < 2:
     print(
         "Error: No print data provided. Please pass JSON data as a command-line argument."
     )
     sys.exit(1)
 
+# Get the print data from the command-line argument
 print_data = json.loads(sys.argv[1])
-current_time = get_philippines_time()
+
+# Extract fallback_time from print_data
+fallback_time = print_data.get("fallback_time")
+current_time = get_philippines_time(fallback_time)
+
+# Proceed with the rest of the printing logic using current_time
 datetime_obj = datetime.strptime(current_time[:19], "%Y-%m-%dT%H:%M:%S")
 formatted_date = datetime_obj.strftime("%a, %b %d, %Y")
 formatted_time = datetime_obj.strftime("%I:%M %p")

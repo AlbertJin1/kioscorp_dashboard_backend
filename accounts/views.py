@@ -1,7 +1,27 @@
+from datetime import timedelta, datetime
+from decimal import Decimal
+import json
+import socket
+import subprocess
+import os
+import win32print
+
 from django.contrib.auth import authenticate, logout as django_logout
+from django.http import HttpResponse, JsonResponse
+from django.db import transaction
+from django.db.models import Count, Sum
+from django.db.models.functions import TruncMonth, ExtractMonth
+from django.utils import timezone
+from django.utils.dateparse import parse_date
+from django.views.decorators.csrf import csrf_exempt
+
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
+
 from .models import (
     CustomUser,
     Log,
@@ -25,27 +45,7 @@ from .serializers import (
     SalesDataSerializer,
     OrderItemHistorySerializer,
 )
-from rest_framework.authtoken.models import Token
-from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import IsOwnerOrAdmin
-from rest_framework.views import APIView
-from django.utils import timezone
-from datetime import timedelta
-from django.http import HttpResponse
-import socket
-import json
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import subprocess
-from decimal import Decimal
-from django.db import transaction
-import win32print
-import os
-from django.db.models import Count
-from django.db.models.functions import ExtractMonth
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-from django.utils.dateparse import parse_date
 
 
 # FOR PRINTING IN KIOSK
@@ -911,7 +911,8 @@ def pay_order(request, order_id):
             "order_status": order.order_status,
             "paid_amount": float(amount_given),
             "change": float(change),
-            "cashier": cashier_name,  # Add cashier's name here
+            "cashier": cashier_name,
+            "fallback_time": datetime.now().isoformat(),  # Device's current time as fallback
         }
 
         # Send print data to the print receipt function
