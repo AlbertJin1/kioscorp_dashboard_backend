@@ -11,10 +11,8 @@ def get_philippines_time(fallback_time=None):
         if response.status_code == 200:
             return response.json()["datetime"]
     except:
-        pass  # Continue to fallback if any issue occurs
-
-    # If online time is unavailable, use the fallback time if provided
-    return fallback_time if fallback_time else "Could not get time"
+        # If there is an error, return fallback time immediately
+        return fallback_time if fallback_time else "Could not get time"
 
 
 # Ensure print_data is passed as an argument
