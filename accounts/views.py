@@ -270,7 +270,10 @@ def register_owner(request):
 
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        user = serializer.save()
+        user.is_staff = True  # Set is_staff to True
+        user.is_superuser = True  # Set is_superuser to True
+        user.save()  # Save the user instance
         Log.objects.create(
             username=serializer.data["username"], action="Registered as owner"
         )
@@ -494,17 +497,32 @@ def update_user(request, user_id):
     try:
         user = CustomUser.objects.get(id=user_id)
         serializer = UserSerializer(user, data=request.data, partial=True)
+
         if serializer.is_valid():
-            serializer.save()
+            # Update the user's role
+            new_role = serializer.validated_data.get("role", user.role)
+
+            if new_role == "admin":
+                user.is_staff = True  # Set is_staff to True for admin
+                user.is_superuser = False  # Set is_superuser to True for admin
+            elif new_role == "cashier":
+                user.is_staff = False  # Set is_staff to False for cashier
+                user.is_superuser = False  # Set is_superuser to False for cashier
+            elif new_role == "owner":
+                user.is_staff = True  # Set is_staff to True for owner
+                user.is_superuser = True  # Set is_superuser to True for owner
+
+            serializer.save()  # Save the user instance
+            user.save()  # Save the changes to the user instance
             Log.objects.create(
                 username=request.user.username, action=f"Updated user {user.username}"
             )
             return Response(
-                {"success": "User updated successfully!"}, status=status.HTTP_200_OK
+                {"success": "User  updated successfully!"}, status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except CustomUser.DoesNotExist:
-        return Response({"error": "User not found!"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "User  not found!"}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["DELETE"])

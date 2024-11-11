@@ -11,6 +11,9 @@ pip install django-celery-beat
 # to run
 python manage.py runserver
 
+# ANY DEVICE CAN ACCESS
+python manage.py runserver 0.0.0.0:8000 
+
 # Create migrations
 python manage.py makemigrations
 
