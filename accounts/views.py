@@ -661,6 +661,22 @@ class SubCategoryCountView(APIView):
         return Response({"count": count})
 
 
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_subcategory_image(request, sub_category_id):
+    try:
+        sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
+        if sub_category.sub_category_image:
+            sub_category.sub_category_image.delete(save=False)  # Delete the image file
+            sub_category.sub_category_image = (
+                None  # Optionally clear the reference in the database
+            )
+            sub_category.save()  # Save the changes to the database
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except SubCategory.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+
 class ProductView(APIView):
     def get(self, request):
         category = request.GET.get("category")  # Accept a category query parameter
