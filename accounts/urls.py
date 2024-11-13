@@ -23,7 +23,6 @@ from .views import (
     # Categories
     MainCategoryView,
     SubCategoryView,
-    delete_subcategory_image,
     # Products
     ProductView,
     ProductDetailView,
@@ -36,11 +35,12 @@ from .views import (
     VoidOrderView,
     order_history,
     # Sales
+    CustomerCountByMonthView,
     get_sales_data,
     monthly_sales,
     sales_by_category,
     satisfaction_overview,
-    CustomerCountByMonthView,
+    top_selling_products,
     # Feedback
     FeedbackCreateView,
     # Miscellaneous
@@ -85,11 +85,6 @@ urlpatterns = [
         SubCategoryView.as_view(),
         name="sub_category_detail",
     ),
-    path(
-        "api/sub-categories/<int:sub_category_id>/delete-image/",
-        delete_subcategory_image,
-        name="delete_subcategory_image",
-    ),
     # Products
     path("api/products/", ProductView.as_view(), name="products"),
     path(
@@ -111,6 +106,9 @@ urlpatterns = [
     path("api/sales/data/", get_sales_data, name="sales_data"),
     path("api/sales/monthly/", monthly_sales, name="monthly_sales"),
     path("api/sales/category/", sales_by_category, name="sales_by_category"),
+    path("api/top-selling-products/", top_selling_products, name="top_selling_products"),
+    path("api/customers/counts/month/", CustomerCountByMonthView.as_view(), name="customer_count_by_month"),
+    
     # Feedback
     path("api/feedback/", FeedbackCreateView.as_view(), name="feedback-create"),
     path(

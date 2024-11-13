@@ -30,6 +30,4 @@ def create_default_owner(sender, **kwargs):
                 username="owner",
                 password="password",  # Set a default password
                 role="owner",  # Set the role to owner
-                is_superuser=True,  # Set superuser status to True
-                is_staff=True,  # Set staff status to True
             )

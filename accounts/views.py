@@ -7,6 +7,7 @@ import os
 import win32print
 
 from django.contrib.auth import authenticate, logout as django_logout
+from django.core.files.storage import default_storage
 from django.http import HttpResponse, JsonResponse
 from django.db import transaction
 from django.db.models import Count, Sum
@@ -271,8 +272,6 @@ def register_owner(request):
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        user.is_staff = True  # Set is_staff to True
-        user.is_superuser = True  # Set is_superuser to True
         user.save()  # Save the user instance
         Log.objects.create(
             username=serializer.data["username"], action="Registered as owner"
@@ -499,21 +498,7 @@ def update_user(request, user_id):
         serializer = UserSerializer(user, data=request.data, partial=True)
 
         if serializer.is_valid():
-            # Update the user's role
-            new_role = serializer.validated_data.get("role", user.role)
-
-            if new_role == "admin":
-                user.is_staff = True  # Set is_staff to True for admin
-                user.is_superuser = False  # Set is_superuser to True for admin
-            elif new_role == "cashier":
-                user.is_staff = False  # Set is_staff to False for cashier
-                user.is_superuser = False  # Set is_superuser to False for cashier
-            elif new_role == "owner":
-                user.is_staff = True  # Set is_staff to True for owner
-                user.is_superuser = True  # Set is_superuser to True for owner
-
             serializer.save()  # Save the user instance
-            user.save()  # Save the changes to the user instance
             Log.objects.create(
                 username=request.user.username, action=f"Updated user {user.username}"
             )
@@ -593,6 +578,20 @@ class SubCategoryView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        # Check for duplicate subcategory name in the same main category
+        sub_category_name = request.data.get("sub_category_name")
+        main_category_id = request.data.get("main_category")
+
+        if SubCategory.objects.filter(
+            sub_category_name=sub_category_name, main_category_id=main_category_id
+        ).exists():
+            return Response(
+                {
+                    "error": "A subcategory with this name already exists in the selected main category."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = SubCategorySerializer(data=request.data)
         if serializer.is_valid():
             sub_category = serializer.save()
@@ -626,11 +625,22 @@ class SubCategoryView(APIView):
     def delete(self, request, sub_category_id):
         try:
             sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
-            if Product.objects.filter(sub_category=sub_category).exists():
+            # Check if the subcategory has associated products
+            associated_products = Product.objects.filter(sub_category=sub_category)
+            print(
+                f"Associated products for subcategory {sub_category_id}: {associated_products}"
+            )  # Log associated products
+
+            if associated_products.exists():
                 return Response(
                     {"error": "Cannot delete subcategory. It has associated products."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Proceed with deletion if no associated products
+            if sub_category.sub_category_image:
+                default_storage.delete(sub_category.sub_category_image.path)
+
             sub_category.delete()
             Log.objects.create(
                 username=request.user.username,
@@ -645,6 +655,20 @@ class CreateSubCategoryView(APIView):
     permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 
     def post(self, request):
+        # Check for duplicate subcategory name in the same main category
+        sub_category_name = request.data.get("sub_category_name")
+        main_category_id = request.data.get("main_category")
+
+        if SubCategory.objects.filter(
+            sub_category_name=sub_category_name, main_category_id=main_category_id
+        ).exists():
+            return Response(
+                {
+                    "error": "A subcategory with this name already exists in the selected main category."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = SubCategorySerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -659,22 +683,6 @@ class SubCategoryCountView(APIView):
     def get(self, request, main_category):
         count = SubCategory.objects.filter(main_category=main_category).count()
         return Response({"count": count})
-
-
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_subcategory_image(request, sub_category_id):
-    try:
-        sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
-        if sub_category.sub_category_image:
-            sub_category.sub_category_image.delete(save=False)  # Delete the image file
-            sub_category.sub_category_image = (
-                None  # Optionally clear the reference in the database
-            )
-            sub_category.save()  # Save the changes to the database
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    except SubCategory.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class ProductView(APIView):
@@ -884,78 +892,89 @@ def pay_order(request, order_id):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Proceed to get the order only if the printer is ready
-        order = Order.objects.get(order_id=order_id)
+        # Use a transaction to ensure rollback on failure
+        with transaction.atomic():
+            # Proceed to get the order only if the printer is ready
+            order = Order.objects.get(order_id=order_id)
 
-        # Check stock availability before processing the payment
-        for item in order.orderitem_set.all():
-            product = item.product
-            if product.product_quantity < item.order_item_quantity:
+            # Check stock availability before processing the payment
+            for item in order.orderitem_set.all():
+                product = item.product
+                if product.product_quantity < item.order_item_quantity:
+                    return Response(
+                        {
+                            "error": f"Insufficient stock for {product.product_name}. Available: {product.product_quantity}, Required: {item.order_item_quantity}.",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            amount_given = request.data.get("order_paid_amount")
+            amount_given = Decimal(amount_given)
+
+            total_amount = order.order_amount
+            change = amount_given - total_amount
+
+            if change < 0:
                 return Response(
-                    {
-                        "error": f"Insufficient stock for {product.product_name}. Available: {product.product_quantity}, Required: {item.order_item_quantity}.",
-                    },
+                    {"error": "Insufficient amount provided."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        amount_given = request.data.get("order_paid_amount")
-        amount_given = Decimal(amount_given)
+            # Update the order details
+            order.order_status = "Paid"
+            order.order_paid_amount = amount_given
+            order.order_change = change
+            order.save()
 
-        total_amount = order.order_amount
-        change = amount_given - total_amount
+            # Update product quantities and sold counts
+            for item in order.orderitem_set.all():
+                product = item.product
+                product.product_quantity -= (
+                    item.order_item_quantity
+                )  # Decrease quantity
+                product.product_sold += item.order_item_quantity  # Increase sold count
+                product.save()  # Save the updated product
 
-        if change < 0:
+            # Get the cashier's name from the request data
+            cashier_first_name = request.data.get(
+                "cashier_first_name", "Puerto"
+            )  # Default to "Puerto" if not provided
+            cashier_last_name = request.data.get(
+                "cashier_last_name", ""
+            )  # Keep last name empty if not provided
+            cashier_name = (
+                f"{cashier_first_name} {cashier_last_name}".strip()
+            )  # Strip to remove any extra spaces
+
+            # Prepare data for printing
+            print_data = {
+                "items": [
+                    {
+                        "product": {
+                            "product_id": item.product.product_id,
+                            "product_name": item.product.product_name,
+                            "product_price": float(item.product.product_price),
+                        },
+                        "quantity": item.order_item_quantity,
+                    }
+                    for item in order.orderitem_set.all()
+                ],
+                "total": float(total_amount),
+                "order_id": order.order_id,
+                "order_status": order.order_status,
+                "paid_amount": float(amount_given),
+                "change": float(change),
+                "cashier": cashier_name,
+                "fallback_time": datetime.now().isoformat(),  # Device's current time as fallback
+            }
+
+            # Send print data to the print receipt function
+            print_receiptPOS(print_data)
+
             return Response(
-                {"error": "Insufficient amount provided."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"success": "Order successfully paid.", "order_id": order.order_id},
+                status=status.HTTP_200_OK,
             )
-
-        # Update the order details only if the printer is ready
-        order.order_status = "Paid"
-        order.order_paid_amount = amount_given
-        order.order_change = change
-        order.save()
-
-        # Update product quantities and sold counts
-        for item in order.orderitem_set.all():
-            product = item.product
-            product.product_quantity -= item.order_item_quantity  # Decrease quantity
-            product.product_sold += item.order_item_quantity  # Increase sold count
-            product.save()  # Save the updated product
-
-        # Get the logged-in user's name
-        user = request.user
-        cashier_name = f"{user.first_name} {user.last_name}"
-
-        # Prepare data for printing
-        print_data = {
-            "items": [
-                {
-                    "product": {
-                        "product_id": item.product.product_id,
-                        "product_name": item.product.product_name,
-                        "product_price": float(item.product.product_price),
-                    },
-                    "quantity": item.order_item_quantity,
-                }
-                for item in order.orderitem_set.all()
-            ],
-            "total": float(total_amount),
-            "order_id": order.order_id,
-            "order_status": order.order_status,
-            "paid_amount": float(amount_given),
-            "change": float(change),
-            "cashier": cashier_name,
-            "fallback_time": datetime.now().isoformat(),  # Device's current time as fallback
-        }
-
-        # Send print data to the print receipt function
-        print_receiptPOS(print_data)
-
-        return Response(
-            {"success": "Order successfully paid.", "order_id": order.order_id},
-            status=status.HTTP_200_OK,
-        )
 
     except Order.DoesNotExist:
         return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -1231,29 +1250,33 @@ def order_history(request):
     for order in orders:
         items = []
         for item in order.orderitem_set.all():
-            product_image_url = (
-                request.build_absolute_uri(item.product.product_image.url)
-                if item.product.product_image
-                else None
-            )
-            items.append(
+            # Check if the product exists
+            if item.product is not None:  # This checks if the product is not deleted
+                product_image_url = (
+                    request.build_absolute_uri(item.product.product_image.url)
+                    if item.product.product_image
+                    else None
+                )
+                items.append(
+                    {
+                        "product_image": product_image_url,
+                        "product_name": item.product.product_name,
+                        "product_size": item.product.product_size,  # Include product_size here
+                        "date_created": order.order_date_created,
+                        "status": order.order_status,
+                        "unit_price": float(item.product_price),
+                        "quantity": item.order_item_quantity,
+                    }
+                )
+
+        # Only add the order if it has items
+        if items:
+            grouped_orders.append(
                 {
-                    "product_image": product_image_url,
-                    "product_name": item.product.product_name,
-                    "product_size": item.product.product_size,  # Include product_size here
-                    "date_created": order.order_date_created,
-                    "status": order.order_status,
-                    "unit_price": float(item.product_price),
-                    "quantity": item.order_item_quantity,
+                    "order_id": order.order_id,
+                    "items": items,
                 }
             )
-
-        grouped_orders.append(
-            {
-                "order_id": order.order_id,
-                "items": items,
-            }
-        )
 
     return Response(grouped_orders, status=status.HTTP_200_OK)
 
@@ -1278,7 +1301,7 @@ def monthly_sales(request):
     return Response(sales_data)
 
 
-from django.db.models import Sum
+from django.db.models import F, Sum
 
 
 @api_view(["GET"])
@@ -1288,7 +1311,7 @@ def sales_by_category(request):
     sales_data = (
         OrderItem.objects.filter(order__order_status="Paid")
         .values("product__sub_category__main_category__main_category_name")
-        .annotate(total_sales=Sum("product_price"))
+        .annotate(total_sales=Sum(F("product_price") * F("order_item_quantity")))
     )
 
     # Prepare response data
