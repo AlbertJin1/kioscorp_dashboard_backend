@@ -36,6 +36,8 @@ from .views import (
     order_history,
     # Sales
     CustomerCountByMonthView,
+    clear_customer_data,
+    clear_sales_data,
     get_sales_data,
     monthly_sales,
     sales_by_category,
@@ -106,9 +108,14 @@ urlpatterns = [
     path("api/sales/data/", get_sales_data, name="sales_data"),
     path("api/sales/monthly/", monthly_sales, name="monthly_sales"),
     path("api/sales/category/", sales_by_category, name="sales_by_category"),
-    path("api/top-selling-products/", top_selling_products, name="top_selling_products"),
-    path("api/customers/counts/month/", CustomerCountByMonthView.as_view(), name="customer_count_by_month"),
-    
+    path(
+        "api/top-selling-products/", top_selling_products, name="top_selling_products"
+    ),
+    path(
+        "api/customers/counts/month/",
+        CustomerCountByMonthView.as_view(),
+        name="customer_count_by_month",
+    ),
     # Feedback
     path("api/feedback/", FeedbackCreateView.as_view(), name="feedback-create"),
     path(
@@ -118,6 +125,8 @@ urlpatterns = [
     ),
     # Miscellaneous
     path("api/print-receipt/", print_receipt, name="print_receipt"),
+    path("api/sales/clear/", clear_sales_data, name="clear_sales_data"),
+    path("api/customers/clear/", clear_customer_data, name="clear_customer_data"),
 ]
 
 if settings.DEBUG:

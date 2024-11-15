@@ -1,4 +1,3 @@
-# serializers.py
 from rest_framework import serializers
 from .models import (
     CustomUser,
@@ -78,7 +77,6 @@ class MainCategorySerializer(serializers.ModelSerializer):
         fields = ["main_category_id", "main_category_name"]
 
 
-# serializers.py
 class SubCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SubCategory
@@ -104,9 +102,7 @@ class SubCategorySerializer(serializers.ModelSerializer):
         return instance
 
 
-# serializers.py
 class ProductSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Product
         fields = [
@@ -162,6 +158,12 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.product_name", read_only=True)
+    product_color = serializers.CharField(
+        source="product.product_color", read_only=True
+    )  # Add product _color field
+    product_size = serializers.CharField(
+        source="product.product_size", read_only=True
+    )  # Add product_size field
     product_image = serializers.ImageField(
         source="product.product_image", read_only=True
     )  # Include product image
@@ -174,6 +176,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "product_price",
             "order_item_quantity",
             "product_name",
+            "product_color",  # Add product_color to fields
+            "product_size",  # Add product_size to fields
             "product_image",  # Add product_image to fields
         ]
 
@@ -204,6 +208,9 @@ class SalesDataSerializer(serializers.Serializer):
 class OrderItemHistorySerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.product_name")
     product_size = serializers.CharField(source="product.product_size")  # Add this line
+    product_color = serializers.CharField(
+        source="product.product_color"
+    )  # Add this line
     product_image = serializers.SerializerMethodField()
     unit_price = serializers.FloatField(
         source="product_price"
@@ -217,6 +224,7 @@ class OrderItemHistorySerializer(serializers.ModelSerializer):
         fields = [
             "product_name",
             "product_size",  # Include product_size in fields
+            "product_color",  # Include product_color in fields
             "product_image",
             "unit_price",
             "quantity",

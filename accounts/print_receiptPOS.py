@@ -76,18 +76,28 @@ win32print.WritePrinter(hprinter, b"\n")
 win32print.WritePrinter(hprinter, "Item Name          Qty    Price\n".encode("utf-8"))
 win32print.WritePrinter(hprinter, "--------------------------------\n".encode("utf-8"))
 
-# Debugging: Print the items to check their structure
-print("Items to print:", print_data.get("items", []))
+# Print the items
+items = print_data.get("items", [])
+num_items = len(items)
 
-for item in print_data.get("items", []):
+for index, item in enumerate(items):
     name = item["product"]["product_name"].ljust(19)[:19]
     quantity = str(item["quantity"]).rjust(1)
     price = item["product"]["product_price"]  # This should now be a float
+    color = item["color"]  # Adjust width as needed
+    size = item["size"]  # Adjust width as needed
+
+    # Add a line spacing before the last item
+    if (
+        index == num_items - 1 and num_items > 1
+    ):  # Check if it's the last item and there are multiple items
+        win32print.WritePrinter(hprinter, b"\n")  # Add one line spacing
 
     win32print.WritePrinter(
-        hprinter, f"{name} {quantity}  {price:7.2f}\n".encode("utf-8")
+        hprinter, f"{name} {quantity}  {price:7.2f}\n({color},{size})\n".encode("utf-8")
     )
 
+# After printing all items, add a separator line
 win32print.WritePrinter(hprinter, "--------------------------------\n".encode("utf-8"))
 total = float(print_data.get("total", 0.0))  # Default to 0.0 if not found
 win32print.WritePrinter(hprinter, f"Total:             {total:11.2f}\n".encode("utf-8"))
@@ -97,16 +107,31 @@ for _ in range(2):
     win32print.WritePrinter(hprinter, b"\n")
 
 # Print paid amount and change below the total
-win32print.WritePrinter(hprinter, f"Paid Amount: {paid_amount:.2f}\n".encode("utf-8"))
+win32print.WritePrinter(hprinter, f"Cash: {paid_amount:.2f}\n".encode("utf-8"))
 win32print.WritePrinter(hprinter, f"Change: {change:.2f}\n".encode("utf-8"))
 
 # Add a few new lines for spacing
-for _ in range(3):
+for _ in range(2):
     win32print.WritePrinter(hprinter, b"\n")
 
 # Print the thank you message
 thank_you = "Thank you for your purchase!".center(max_width)
 win32print.WritePrinter(hprinter, f"{thank_you}\n".encode("utf-8"))
+
+for _ in range(1):
+    win32print.WritePrinter(hprinter, b"\n")
+
+# Add the disclaimer about the receipt
+win32print.WritePrinter(hprinter, "<------------------------------>\n".encode("utf-8"))
+disclaimer1 = "Please note that this is not an".center(max_width)
+win32print.WritePrinter(hprinter, f"{disclaimer1}\n".encode("utf-8"))
+disclaimer2 = "official receipt".center(max_width)
+win32print.WritePrinter(hprinter, f"{disclaimer2}\n".encode("utf-8"))
+win32print.WritePrinter(hprinter, "<------------------------------>\n".encode("utf-8"))
+
+
+for _ in range(1):
+    win32print.WritePrinter(hprinter, b"\n")
 
 powered_by = "Powered by KiosCorp".center(max_width)
 win32print.WritePrinter(hprinter, f"{powered_by}\n".encode("utf-8"))

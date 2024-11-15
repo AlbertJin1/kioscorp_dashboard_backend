@@ -10,7 +10,7 @@ from django.contrib.auth import authenticate, logout as django_logout
 from django.core.files.storage import default_storage
 from django.http import HttpResponse, JsonResponse
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, F
 from django.db.models.functions import TruncMonth, ExtractMonth
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -24,7 +24,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 
 from .models import (
-    CustomUser,
+    CustomUser ,
     Log,
     MainCategory,
     SubCategory,
@@ -176,6 +176,9 @@ def create_order(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        Log.objects.create(
+            username=request.user.username, action="Created a new order"
+        )
         return Response(
             {
                 "success": True,
@@ -252,7 +255,7 @@ def register(request):
         serializer.save()
         Log.objects.create(username=serializer.data["username"], action="Registered")
         return Response(
-            {"success": "User registered successfully!"}, status=status.HTTP_201_CREATED
+            {"success": "User  registered successfully!"}, status=status.HTTP_201_CREATED
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -294,20 +297,20 @@ def login(request):
     user = authenticate(request, username=username, password=password)
 
     if user is not None:
-        token, created = Token.objects.get_or_create(user=user)
-        Log.objects.create(username=username, action="Logged in")
-        return Response(
-            {
-                "token": token.key,
-                "firstName": user.first_name,
-                "lastName": user.last_name,
-                "email": user.email,
-                "phoneNumber": user.phone_number,
-                "gender": user.gender,
-                "role": user.role,
-            },
-            status=status.HTTP_200_OK,
-        )
+            token, created = Token.objects.get_or_create(user=user)
+            Log.objects.create(username=username, action="Logged in")
+            return Response(
+                {
+                    "token": token.key,
+                    "firstName": user.first_name,
+                    "lastName": user.last_name,
+                    "email": user.email,
+                    "phoneNumber": user.phone_number,
+                    "gender": user.gender,
+                    "role": user.role,
+                },
+                status=status.HTTP_200_OK,
+            )
 
     return Response(
         {"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
@@ -393,7 +396,7 @@ def get_profile_picture(request):
 )  # Only admins or owners can access
 def get_profile_picture_admin(request, user_id):
     try:
-        user = CustomUser.objects.get(id=user_id)
+        user = CustomUser .objects.get(id=user_id)
         if user.profile_picture:
             return HttpResponse(user.profile_picture, content_type="image/jpeg")
         else:
@@ -401,8 +404,8 @@ def get_profile_picture_admin(request, user_id):
                 {"error": "No profile picture available."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-    except CustomUser.DoesNotExist:
-        return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+    except CustomUser .DoesNotExist:
+        return Response({"error": "User  not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["PUT"])
@@ -440,29 +443,14 @@ def change_password(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsOwnerOrAdmin])
 def get_users(request):
-    users = CustomUser.objects.all()
+    users = CustomUser .objects.all()
     serializer = UserSerializer(users, many=True)
-
-    # Create a log entry only if one doesn't already exist for the same action and timestamp
-    timestamp = timezone.now()
-    existing_log = Log.objects.filter(
-        username=request.user.username,
-        action="Viewed all users",
-        timestamp__gte=timestamp - timedelta(seconds=1),
-    ).exists()
-
-    if not existing_log:
-        Log.objects.create(
-            username=request.user.username,
-            action="Viewed all users",
-            timestamp=timestamp,
-        )
 
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated ])
 def add_user(request):
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
@@ -471,7 +459,7 @@ def add_user(request):
             username=serializer.data["username"], action="Added new user"
         )
         return Response(
-            {"success": "User added successfully!"}, status=status.HTTP_201_CREATED
+            {"success": "User  added successfully!"}, status=status.HTTP_201_CREATED
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -480,21 +468,18 @@ def add_user(request):
 @permission_classes([IsAuthenticated, IsOwnerOrAdmin])
 def get_user_by_id(request, user_id):
     try:
-        user = CustomUser.objects.get(id=user_id)
+        user = CustomUser  .objects.get(id=user_id)
         serializer = UserSerializer(user)
-        Log.objects.create(
-            username=request.user.username, action=f"Viewed user {user.username}"
-        )
         return Response(serializer.data, status=status.HTTP_200_OK)
-    except CustomUser.DoesNotExist:
-        return Response({"error": "User not found!"}, status=status.HTTP_404_NOT_FOUND)
+    except CustomUser  .DoesNotExist:
+        return Response({"error": "User  not found!"}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsOwnerOrAdmin])
 def update_user(request, user_id):
     try:
-        user = CustomUser.objects.get(id=user_id)
+        user = CustomUser  .objects.get(id=user_id)
         serializer = UserSerializer(user, data=request.data, partial=True)
 
         if serializer.is_valid():
@@ -506,7 +491,7 @@ def update_user(request, user_id):
                 {"success": "User  updated successfully!"}, status=status.HTTP_200_OK
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except CustomUser.DoesNotExist:
+    except CustomUser  .DoesNotExist:
         return Response({"error": "User  not found!"}, status=status.HTTP_404_NOT_FOUND)
 
 
@@ -514,7 +499,7 @@ def update_user(request, user_id):
 @permission_classes([IsAuthenticated])
 def delete_user(request, user_id):
     try:
-        user = CustomUser.objects.get(id=user_id)
+        user = CustomUser  .objects.get(id=user_id)
 
         # Check if the request user is trying to delete their own account
         if request.user == user:
@@ -535,24 +520,20 @@ def delete_user(request, user_id):
         user.delete()  # Delete the user
         Log.objects.create(
             username=request.user.username,
-            action=f"Deleted user {
-                           username}",
+            action=f"Deleted user {username}",
         )  # Log the deletion
 
         return Response(
-            {"success": "User deleted successfully!"}, status=status.HTTP_204_NO_CONTENT
+            {"success": "User  deleted successfully!"}, status=status.HTTP_204_NO_CONTENT
         )
-    except CustomUser.DoesNotExist:
-        return Response({"error": "User not found!"}, status=status.HTTP_404_NOT_FOUND)
+    except CustomUser  .DoesNotExist:
+        return Response({"error": "User  not found!"}, status=status.HTTP_404_NOT_FOUND)
 
 
 class MainCategoryView(APIView):
     def get(self, request):
         main_categories = MainCategory.objects.all()
         serializer = MainCategorySerializer(main_categories, many=True)
-        Log.objects.create(
-            username=request.user.username, action="Viewed all main categories"
-        )
         return Response(serializer.data)
 
     def post(self, request):
@@ -572,9 +553,6 @@ class SubCategoryView(APIView):
     def get(self, request):
         sub_categories = SubCategory.objects.all()
         serializer = SubCategorySerializer(sub_categories, many=True)
-        Log.objects.create(
-            username=request.user.username, action="Viewed all sub categories"
-        )
         return Response(serializer.data)
 
     def post(self, request):
@@ -609,7 +587,7 @@ class SubCategoryView(APIView):
                 sub_category,
                 data=request.data,
                 partial=True,
-                context={"request": request},
+ context={"request": request},
             )
             if serializer.is_valid():
                 serializer.save()
@@ -627,9 +605,6 @@ class SubCategoryView(APIView):
             sub_category = SubCategory.objects.get(sub_category_id=sub_category_id)
             # Check if the subcategory has associated products
             associated_products = Product.objects.filter(sub_category=sub_category)
-            print(
-                f"Associated products for subcategory {sub_category_id}: {associated_products}"
-            )  # Log associated products
 
             if associated_products.exists():
                 return Response(
@@ -718,7 +693,6 @@ class ProductView(APIView):
                 products, many=True
             )  # Use original serializer if not needed
 
-        Log.objects.create(username=request.user.username, action="Viewed all products")
         return Response(serializer.data)
 
     def post(self, request):
@@ -737,10 +711,6 @@ class ProductDetailView(APIView):
         try:
             product = Product.objects.get(product_id=product_id)
             serializer = ProductSerializer(product)
-            Log.objects.create(
-                username=request.user.username,
-                action=f"Viewed product {product.product_name}",
-            )
             return Response(serializer.data)
         except Product.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -810,7 +780,7 @@ def reset_password(request):
     new_password = request.data.get("newPassword")
 
     try:
-        user = CustomUser.objects.get(username=username)
+        user = CustomUser .objects.get(username=username)
         user.set_password(new_password)
         user.save()
         Log.objects.create(
@@ -820,7 +790,7 @@ def reset_password(request):
             {"success": f"Password for {username} has been reset."},
             status=status.HTTP_200_OK,
         )
-    except CustomUser.DoesNotExist:
+    except CustomUser .DoesNotExist:
         return Response({"error": "User  not found."}, status=status.HTTP_404_NOT_FOUND)
 
 
@@ -837,6 +807,9 @@ class VoidOrderView(APIView):
             order = Order.objects.get(order_id=order_id)
             order.order_status = "Void"  # Update the order status to "Void"
             order.save()  # Save the changes
+            Log.objects.create(
+                username=request.user.username, action=f"Voided order {order_id}"
+            )
             return Response(
                 {"message": "Order successfully voided."}, status=status.HTTP_200_OK
             )
@@ -892,7 +865,7 @@ def pay_order(request, order_id):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Use a transaction to ensure rollback on failure
+        # Use a transaction to ensure rollback on failure ```python
         with transaction.atomic():
             # Proceed to get the order only if the printer is ready
             order = Order.objects.get(order_id=order_id)
@@ -956,6 +929,8 @@ def pay_order(request, order_id):
                             "product_price": float(item.product.product_price),
                         },
                         "quantity": item.order_item_quantity,
+                        "color": item.product.product_color,  # Add color
+                        "size": item.product.product_size,  # Add size
                     }
                     for item in order.orderitem_set.all()
                 ],
@@ -971,6 +946,9 @@ def pay_order(request, order_id):
             # Send print data to the print receipt function
             print_receiptPOS(print_data)
 
+            Log.objects.create(
+                username=request.user.username, action=f"Paid for order {order_id}"
+            )
             return Response(
                 {"success": "Order successfully paid.", "order_id": order.order_id},
                 status=status.HTTP_200_OK,
@@ -1019,7 +997,7 @@ def print_receiptPOS(print_data):
             raise Exception(f"Printing failed: {stderr.decode('utf-8')}")
 
     except Exception as e:
-        raise Exception(f"Error in print_receiptPOS: {str(e)}")
+        raise Exception(f" Error in print_receiptPOS: {str(e)}")
 
 
 @api_view(["GET"])
@@ -1150,7 +1128,7 @@ def low_selling_products(request):
                 {
                     "product_id": product_details.product_id,
                     "product_name": product_details.product_name,
-                    "product_image": request.build_absolute_uri(
+ "product_image": request.build_absolute_uri(
                         product_details.product_image.url
                     ),
                     "product_type": product_details.product_type,  # Include product type
@@ -1294,14 +1272,11 @@ def monthly_sales(request):
     )
 
     # Prepare data for response
-    sales_data = {month: 0 for month in range(1, 13)}  # Initialize all months to 0
+    sales_data = {month: 0 for month in range(1, 13)}  # Initialize all months to 0 ```python
     for entry in monthly_sales_data:
         sales_data[entry["month"]] = entry["total_sales"]
 
     return Response(sales_data)
-
-
-from django.db.models import F, Sum
 
 
 @api_view(["GET"])
@@ -1323,3 +1298,33 @@ def sales_by_category(request):
     }
 
     return Response(response_data)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_sales_data(request):
+    try:
+        # Clear all order items
+        OrderItem.objects.all().delete()
+
+        # Clear all orders
+        Order.objects.all().delete()
+
+        # Reset product_sold for all products to 0
+        Product.objects.update(product_sold=0)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def clear_customer_data(request):
+    try:
+        # Clear all customer records
+        Customer.objects.all().delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
