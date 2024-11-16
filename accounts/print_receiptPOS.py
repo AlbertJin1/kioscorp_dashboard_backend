@@ -5,14 +5,19 @@ import requests
 from datetime import datetime
 
 
-def get_philippines_time(fallback_time=None):
+def get_philippines_time(fallback_time=None, timeout=1.5):
     try:
-        response = requests.get("http://worldtimeapi.org/api/timezone/Asia/Manila")
+        response = requests.get(
+            "http://worldtimeapi.org/api/timezone/Asia/Manila", timeout=timeout
+        )
         if response.status_code == 200:
             return response.json()["datetime"]
-    except:
-        # If there is an error, return fallback time immediately
-        return fallback_time if fallback_time else "Could not get time"
+    except requests.exceptions.Timeout:
+        print("Request timed out. Using fallback time.")
+    except Exception as e:
+        print(f"An error occurred: {e}. Using fallback time.")
+
+    return fallback_time if fallback_time else "Could not get time"
 
 
 # Ensure print_data is passed as an argument
@@ -38,6 +43,10 @@ printer_name = "POS58 v9"
 hprinter = win32print.OpenPrinter(printer_name)
 job = win32print.StartDocPrinter(hprinter, 1, ("Receipt", None, "RAW"))
 win32print.StartPagePrinter(hprinter)
+
+# Command to open the cash drawer
+cash_drawer_command = b"\x1B\x70\x00\x19\xFA"  # ESC p 0 25 250
+win32print.WritePrinter(hprinter, cash_drawer_command)
 
 max_width = 32  # Adjusted width for a 58mm thermal printer
 header1 = " Universal Auto Supply and Bolt".center(max_width)
@@ -87,19 +96,27 @@ for index, item in enumerate(items):
     color = item["color"]  # Adjust width as needed
     size = item["size"]  # Adjust width as needed
 
-    # Add a line spacing before the last item
-    if (
-        index == num_items - 1 and num_items > 1
-    ):  # Check if it's the last item and there are multiple items
-        win32print.WritePrinter(hprinter, b"\n")  # Add one line spacing
-
+    # Print the item details
     win32print.WritePrinter(
-        hprinter, f"{name} {quantity}  {price:7.2f}\n({color},{size})\n".encode("utf-8")
+        hprinter, f"{name} {quantity}  {price:7.2f}\n".encode("utf-8")
     )
+    win32print.WritePrinter(hprinter, f"({color},{size})\n".encode("utf-8"))
+
+    # Add a blank line *after* the item, except for the last item
+    if index < num_items - 1:  # Only if it's not the last item
+        win32print.WritePrinter(hprinter, b"\n")
+
+
+total = float(print_data.get("total", 0.0))  # Default to 0.0 if not found
+
+vat_percentage = 0  # Set VAT percentage to 0%
+vat_amount = total * (vat_percentage / 100)
 
 # After printing all items, add a separator line
 win32print.WritePrinter(hprinter, "--------------------------------\n".encode("utf-8"))
-total = float(print_data.get("total", 0.0))  # Default to 0.0 if not found
+win32print.WritePrinter(
+    hprinter, f"VAT {vat_percentage}%:            {vat_amount:11.2f}\n".encode("utf-8")
+)
 win32print.WritePrinter(hprinter, f"Total:             {total:11.2f}\n".encode("utf-8"))
 
 # Add a few new lines for spacing
@@ -129,7 +146,6 @@ disclaimer2 = "official receipt".center(max_width)
 win32print.WritePrinter(hprinter, f"{disclaimer2}\n".encode("utf-8"))
 win32print.WritePrinter(hprinter, "<------------------------------>\n".encode("utf-8"))
 
-
 for _ in range(1):
     win32print.WritePrinter(hprinter, b"\n")
 
@@ -139,10 +155,6 @@ win32print.WritePrinter(hprinter, f"{powered_by}\n".encode("utf-8"))
 # Add a few new lines for spacing
 for _ in range(4):
     win32print.WritePrinter(hprinter, b"\n")
-
-# Command to open the cash drawer
-cash_drawer_command = b"\x1B\x70\x00\x19\xFA"  # ESC p 0 25 250
-win32print.WritePrinter(hprinter, cash_drawer_command)
 
 # End the printing process
 win32print.EndPagePrinter(hprinter)
