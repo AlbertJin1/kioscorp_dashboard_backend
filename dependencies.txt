@@ -11,7 +11,8 @@ pip install django-celery-beat
 
 # EXE CONVERT
 pip install pyinstaller
-pyinstaller --onefile --icon=kioscorp-icon.ico --noconsole run_django_server.py
+pip install psutil
+pyinstaller --onefile --noconsole --icon=kioscorp-icon.ico run_server.py
 
 # to run
 python manage.py runserver
