@@ -1,5 +1,5 @@
 ('C:\\Users\\Kioscorp\\Documents\\CAPSTONE\\kioscorp_dashboard_backend-1\\dist\\run_django_server.exe',
- True,
+ False,
  False,
  False,
  ['C:\\Users\\Kioscorp\\Documents\\CAPSTONE\\kioscorp_dashboard_backend-1\\kioscorp-icon.ico'],
@@ -94,8 +94,8 @@
  [],
  False,
  False,
- 1731805284,
- [('run.exe',
-   'C:\\Users\\Kioscorp\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\run.exe',
+ 1731805527,
+ [('runw.exe',
+   'C:\\Users\\Kioscorp\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\runw.exe',
    'EXECUTABLE')],
  'C:\\Users\\Kioscorp\\AppData\\Local\\Programs\\Python\\Python313\\python313.dll')
