@@ -8,6 +8,10 @@ pip install requests
 pip install celery redis
 pip install django-celery-beat
 
+
+# EXE CONVERT
+pip install pyinstaller
+
 # to run
 python manage.py runserver
 
