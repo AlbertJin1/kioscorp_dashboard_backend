@@ -48,6 +48,7 @@ from .views import (
     # Miscellaneous
     validate_session,
     print_receipt,
+    ping,
 )
 
 urlpatterns = [
@@ -127,6 +128,7 @@ urlpatterns = [
     path("api/print-receipt/", print_receipt, name="print_receipt"),
     path("api/sales/clear/", clear_sales_data, name="clear_sales_data"),
     path("api/customers/clear/", clear_customer_data, name="clear_customer_data"),
+    path("api/ping/", ping, name="ping"),
 ]
 
 if settings.DEBUG:
