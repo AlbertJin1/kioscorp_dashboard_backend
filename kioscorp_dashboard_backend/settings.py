@@ -52,7 +52,15 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# CORS Configuration
+
+# Function to generate allowed origins based on port range
+def generate_allowed_ports(
+    base_ip="http://192.168.254.101", start_port=3000, end_port=3010
+):
+    return [f"{base_ip}:{port}" for port in range(start_port, end_port + 1)]
+
+
+# Manually specify any other origins that are required
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Frontend URL
     "http://localhost:3001",
@@ -60,7 +68,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3003",
     "http://192.168.254.183:3000",
     "http://192.168.254.107:3000",
-]
+    "http://192.168.254.107:3001",
+] + generate_allowed_ports(
+    base_ip="http://192.168.254.101", start_port=3000, end_port=3010
+)
 
 CORS_ALLOW_ALL_ORIGINS = False
 

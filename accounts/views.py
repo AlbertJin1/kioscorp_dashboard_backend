@@ -81,12 +81,17 @@ def print_receipt(request):
                     product = Product.objects.get(
                         product_id=item["product"]["product_id"]
                     )
-                    OrderItem.objects.create(
+                    # Create OrderItem instance
+                    order_item = OrderItem.objects.create(
                         order=order,
                         product=product,
                         product_price=item["product"]["product_price"],
                         order_item_quantity=item["quantity"],
                     )
+                    # Ensure to pass color and size along with the item details
+                    item["product"]["product_color"] = product.product_color
+                    item["product"]["product_size"] = product.product_size
+
                 except Product.DoesNotExist:
                     return JsonResponse(
                         {
@@ -96,13 +101,29 @@ def print_receipt(request):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Send the print data to the Raspberry Pi, including the order_id, order_status, and queue_number
+            # Prepare the print data
             print_data["order_id"] = order.order_id  # Add order_id to print_data
             print_data["order_status"] = (
                 order.order_status
             )  # Add order_status to print_data
             print_data["queue_number"] = queue_number  # Add queue_number to print_data
 
+            # Pass the item details as well
+            print_data["items"] = [
+                {
+                    "product": {
+                        "product_id": item["product"]["product_id"],
+                        "product_name": item["product"]["product_name"],
+                        "product_price": item["product"]["product_price"],
+                        "product_color": item["product"].get("product_color", "N/A"),
+                        "product_size": item["product"].get("product_size", "N/A"),
+                    },
+                    "quantity": item["quantity"],
+                }
+                for item in print_data["items"]
+            ]
+
+            # Send the print data to the Raspberry Pi
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((RPI_IP, RPI_PORT))
                 s.sendall(json.dumps(print_data).encode("utf-8"))
