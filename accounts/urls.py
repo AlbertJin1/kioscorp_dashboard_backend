@@ -49,6 +49,7 @@ from .views import (
     validate_session,
     print_receipt,
     ping,
+    VATSettingView,
 )
 
 urlpatterns = [
@@ -129,6 +130,7 @@ urlpatterns = [
     path("api/sales/clear/", clear_sales_data, name="clear_sales_data"),
     path("api/customers/clear/", clear_customer_data, name="clear_customer_data"),
     path("api/ping/", ping, name="ping"),
+    path("api/vat-setting/", VATSettingView.as_view(), name="vat-setting"),
 ]
 
 if settings.DEBUG:

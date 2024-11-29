@@ -8,6 +8,7 @@ from .models import (
     Feedback,
     Order,
     OrderItem,
+    VATSetting,
 )
 
 
@@ -234,3 +235,9 @@ class OrderItemHistorySerializer(serializers.ModelSerializer):
 
     def get_product_image(self, obj):
         return obj.product.product_image.url if obj.product.product_image else None
+
+
+class VATSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VATSetting
+        fields = ["id", "vat_percentage", "updated_at"]

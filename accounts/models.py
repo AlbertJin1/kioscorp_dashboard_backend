@@ -247,3 +247,10 @@ class OrderItem(models.Model):
 
 class NextOrderItemId(models.Model):
     next_id = models.IntegerField(default=1)
+
+class VATSetting(models.Model):
+    vat_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=12.00)  # Default is 12% as per Philippine VAT
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"VAT: {self.vat_percentage}%"

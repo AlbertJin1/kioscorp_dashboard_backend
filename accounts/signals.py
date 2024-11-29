@@ -1,6 +1,6 @@
 from django.db.models.signals import post_migrate
 from django.dispatch import receiver
-from .models import MainCategory
+from .models import MainCategory, VATSetting
 from django.contrib.auth import get_user_model
 
 
@@ -31,3 +31,13 @@ def create_default_owner(sender, **kwargs):
                 password="password",  # Set a default password
                 role="owner",  # Set the role to owner
             )
+
+
+@receiver(post_migrate)
+def create_default_vat_setting(sender, **kwargs):
+    if (
+        kwargs["app_config"].name == "accounts"
+    ):  # Ensure this runs only for the accounts app
+        # Check if a VAT setting already exists
+        if not VATSetting.objects.exists():
+            VATSetting.objects.create(vat_percentage=0)  # Default VAT tax as 0

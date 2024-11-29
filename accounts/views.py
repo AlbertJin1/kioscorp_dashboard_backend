@@ -33,6 +33,7 @@ from .models import (
     OrderItem,
     Customer,
     Feedback,
+    VATSetting,
 )
 from .serializers import (
     UserSerializer,
@@ -45,6 +46,7 @@ from .serializers import (
     OrderSerializer,
     SalesDataSerializer,
     OrderItemHistorySerializer,
+    VATSettingSerializer,
 )
 from .permissions import IsOwnerOrAdmin
 
@@ -64,9 +66,11 @@ def print_receipt(request):
             # Create a new Customer instance (you may want to customize this)
             customer = Customer.objects.create()
 
-            # Count the number of pending orders to determine the queue number
+            # Get the current count of pending orders (This will give us the queue number)
             pending_count = Order.objects.filter(order_status="Pending").count()
-            queue_number = pending_count + 1  # This new order will be the next in line
+
+            # If no pending orders, set queue number to 1
+            queue_number = 1 if pending_count == 0 else pending_count + 1
 
             # Create a new Order instance
             order = Order.objects.create(
@@ -886,9 +890,7 @@ def pay_order(request, order_id):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        # Use a transaction to ensure rollback on failure ```python
         with transaction.atomic():
-            # Proceed to get the order only if the printer is ready
             order = Order.objects.get(order_id=order_id)
 
             # Check stock availability before processing the payment
@@ -905,7 +907,25 @@ def pay_order(request, order_id):
             amount_given = request.data.get("order_paid_amount")
             amount_given = Decimal(amount_given)
 
-            total_amount = order.order_amount
+            # Calculate subtotal
+            subtotal = sum(
+                item.product.product_price * item.order_item_quantity
+                for item in order.orderitem_set.all()
+            )
+
+            # Get the VAT percentage from the request data
+            vat_percentage = request.data.get(
+                "vat_percentage", 0
+            )  # Default to 0 if not provided
+            vat_percentage = float(
+                vat_percentage
+            )  # Ensure it's a float for calculations
+
+            # Convert vat_percentage to Decimal
+            vat_percentage = Decimal(vat_percentage)
+
+            vat_amount = subtotal * (vat_percentage / 100)  # Calculate VAT amount
+            total_amount = subtotal + vat_amount  # Total including VAT
             change = amount_given - total_amount
 
             if change < 0:
@@ -918,27 +938,20 @@ def pay_order(request, order_id):
             order.order_status = "Paid"
             order.order_paid_amount = amount_given
             order.order_change = change
+            order.order_amount = total_amount  # Update to total amount after VAT
             order.save()
 
             # Update product quantities and sold counts
             for item in order.orderitem_set.all():
                 product = item.product
-                product.product_quantity -= (
-                    item.order_item_quantity
-                )  # Decrease quantity
-                product.product_sold += item.order_item_quantity  # Increase sold count
-                product.save()  # Save the updated product
+                product.product_quantity -= item.order_item_quantity
+                product.product_sold += item.order_item_quantity
+                product.save()
 
             # Get the cashier's name from the request data
-            cashier_first_name = request.data.get(
-                "cashier_first_name", "Puerto"
-            )  # Default to "Puerto" if not provided
-            cashier_last_name = request.data.get(
-                "cashier_last_name", ""
-            )  # Keep last name empty if not provided
-            cashier_name = (
-                f"{cashier_first_name} {cashier_last_name}".strip()
-            )  # Strip to remove any extra spaces
+            cashier_first_name = request.data.get("cashier_first_name", "Puerto")
+            cashier_last_name = request.data.get("cashier_last_name", "")
+            cashier_name = f"{cashier_first_name} {cashier_last_name}".strip()
 
             # Prepare data for printing
             print_data = {
@@ -950,18 +963,20 @@ def pay_order(request, order_id):
                             "product_price": float(item.product.product_price),
                         },
                         "quantity": item.order_item_quantity,
-                        "color": item.product.product_color,  # Add color
-                        "size": item.product.product_size,  # Add size
+                        "color": item.product.product_color,
+                        "size": item.product.product_size,
                     }
                     for item in order.orderitem_set.all()
                 ],
-                "total": float(total_amount),
+                "subtotal": float(subtotal),  # Include subtotal
+                "total": float(total_amount),  # Total after VAT
                 "order_id": order.order_id,
                 "order_status": order.order_status,
                 "paid_amount": float(amount_given),
                 "change": float(change),
                 "cashier": cashier_name,
-                "fallback_time": datetime.now().isoformat(),  # Device's current time as fallback
+                "vat_percentage": vat_percentage,  # Include VAT percentage
+                "fallback_time": datetime.now().isoformat(),
             }
 
             # Send print data to the print receipt function
@@ -1357,3 +1372,23 @@ def clear_customer_data(request):
 @api_view(["GET"])
 def ping(request):
     return Response({"status": "Backend is operational."}, status=status.HTTP_200_OK)
+
+
+class VATSettingView(APIView):
+
+    def get(self, request):
+        vat_setting = VATSetting.objects.first()
+        if not vat_setting:
+            return Response(
+                {"error": "VAT setting not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = VATSettingSerializer(vat_setting)
+        return Response(serializer.data)
+
+    def put(self, request):
+        vat_setting, created = VATSetting.objects.get_or_create()
+        serializer = VATSettingSerializer(vat_setting, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

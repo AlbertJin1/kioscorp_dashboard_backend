@@ -106,16 +106,21 @@ for index, item in enumerate(items):
     if index < num_items - 1:  # Only if it's not the last item
         win32print.WritePrinter(hprinter, b"\n")
 
-
-total = float(print_data.get("total", 0.0))  # Default to 0.0 if not found
-
-vat_percentage = 0  # Set VAT percentage to 0%
-vat_amount = total * (vat_percentage / 100)
-
 # After printing all items, add a separator line
 win32print.WritePrinter(hprinter, "--------------------------------\n".encode("utf-8"))
+
+# Extract total from print_data
+total = float(print_data.get("total", 0.0))  # Default to 0.0 if not found
+subtotal = float(print_data.get("subtotal", 0.0))  # Get subtotal from print_data
+vat_percentage = float(print_data.get("vat_percentage", 0))  # Get VAT percentage
+vat_amount = subtotal * (vat_percentage / 100)  # Calculate VAT amount
+
+# Print the subtotal, VAT, and total
 win32print.WritePrinter(
-    hprinter, f"VAT {vat_percentage}%:            {vat_amount:11.2f}\n".encode("utf-8")
+    hprinter, f"Subtotal:          {subtotal:11.2f}\n".encode("utf-8")
+)
+win32print.WritePrinter(
+    hprinter, f"VAT {vat_percentage}%:         {vat_amount:11.2f}\n".encode("utf-8")
 )
 win32print.WritePrinter(hprinter, f"Total:             {total:11.2f}\n".encode("utf-8"))
 
