@@ -1299,23 +1299,60 @@ def order_history(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def monthly_sales(request):
-    current_year = timezone.now().year
+    year = request.GET.get("year", timezone.now().year)
+    month_start = request.GET.get("month_start", 1)
+    month_end = request.GET.get("month_end", 12)
+
     monthly_sales_data = (
-        Order.objects.filter(order_status="Paid", order_date_created__year=current_year)
+        Order.objects.filter(order_status="Paid", order_date_created__year=year)
         .annotate(month=ExtractMonth("order_date_created"))
         .values("month")
         .annotate(total_sales=Sum("order_amount"))
+        .filter(month__gte=month_start, month__lte=month_end)
         .order_by("month")
     )
 
     # Prepare data for response
-    sales_data = {
-        month: 0 for month in range(1, 13)
-    }  # Initialize all months to 0 ```python
+    sales_data = {month: 0 for month in range(1, 13)}  # Initialize all months to 0
     for entry in monthly_sales_data:
         sales_data[entry["month"]] = entry["total_sales"]
 
     return Response(sales_data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_products_sold(request):
+    year = request.GET.get("year")
+    month = request.GET.get("month")
+
+    if not year or not month:
+        return Response({"error": "Year and month are required."}, status=400)
+
+    # Query to get products sold in the specified month and year
+    products_sold = (
+        OrderItem.objects.filter(
+            order__order_date_created__year=year, order__order_date_created__month=month
+        )
+        .values(
+            "product__product_name", "product__product_image"
+        )  # Corrected field name
+        .annotate(total_sold=Sum("order_item_quantity"))  # Sum quantities sold
+    )
+
+    # Prepare the response data
+    response_data = [
+        {
+            "product_name": item["product__product_name"],
+            "quantity": item["total_sold"],
+            "product_image": item[
+                "product__product_image"
+            ],  # Ensure this returns the correct relative path
+        }
+        for item in products_sold
+    ]
+
+    return Response(response_data)
 
 
 @api_view(["GET"])

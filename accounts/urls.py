@@ -38,6 +38,7 @@ from .views import (
     CustomerCountByMonthView,
     clear_customer_data,
     clear_sales_data,
+    get_products_sold,
     get_sales_data,
     monthly_sales,
     sales_by_category,
@@ -118,6 +119,7 @@ urlpatterns = [
         CustomerCountByMonthView.as_view(),
         name="customer_count_by_month",
     ),
+    path("api/sales/products/", get_products_sold, name="get_products_sold"),
     # Feedback
     path("api/feedback/", FeedbackCreateView.as_view(), name="feedback-create"),
     path(
