@@ -38,12 +38,17 @@ from .views import (
     CustomerCountByMonthView,
     clear_customer_data,
     clear_sales_data,
-    get_products_sold,
     get_sales_data,
     monthly_sales,
     sales_by_category,
     satisfaction_overview,
     top_selling_products,
+    get_monthly_products_sold,
+    daily_sales,
+    get_sales_data_whole_year,
+    update_order_item,
+    update_order_amount,
+    cashier_transactions,
     # Feedback
     FeedbackCreateView,
     # Miscellaneous
@@ -115,11 +120,30 @@ urlpatterns = [
         "api/top-selling-products/", top_selling_products, name="top_selling_products"
     ),
     path(
-        "api/customers/counts/month/",
+        "api/customers/counts/<str:view_type>/",
         CustomerCountByMonthView.as_view(),
-        name="customer_count_by_month",
+        name="customer_count",
     ),
-    path("api/sales/products/", get_products_sold, name="get_products_sold"),
+    path(
+        "api/monthly-products-sold/",
+        get_monthly_products_sold,
+        name="monthly-products-sold",
+    ),
+    path("api/sales/daily/", daily_sales, name="daily_sales"),
+    path(
+        "api/sales/data/whole/", get_sales_data_whole_year, name="sales_data_whole_year"
+    ),
+    path(
+        "api/orders/update-order/<int:order_id>/",
+        update_order_item,
+        name="update_order_item",
+    ),
+    path(
+        "api/orders/update-order-amount/<int:order_id>/",
+        update_order_amount,
+        name="update_order_amount",
+    ),
+    path('api/cashier-transactions/', cashier_transactions, name='cashier-transactions'),
     # Feedback
     path("api/feedback/", FeedbackCreateView.as_view(), name="feedback-create"),
     path(

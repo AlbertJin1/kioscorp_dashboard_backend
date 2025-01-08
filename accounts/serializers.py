@@ -161,13 +161,11 @@ class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.product_name", read_only=True)
     product_color = serializers.CharField(
         source="product.product_color", read_only=True
-    )  # Add product _color field
-    product_size = serializers.CharField(
-        source="product.product_size", read_only=True
-    )  # Add product_size field
+    )
+    product_size = serializers.CharField(source="product.product_size", read_only=True)
     product_image = serializers.ImageField(
         source="product.product_image", read_only=True
-    )  # Include product image
+    )
 
     class Meta:
         model = OrderItem
@@ -177,9 +175,10 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "product_price",
             "order_item_quantity",
             "product_name",
-            "product_color",  # Add product_color to fields
-            "product_size",  # Add product_size to fields
-            "product_image",  # Add product_image to fields
+            "product_color",
+            "product_size",
+            "product_image",
+            "discounted_price",  # Include discounted price in the serializer
         ]
 
 
@@ -208,33 +207,53 @@ class SalesDataSerializer(serializers.Serializer):
 
 class OrderItemHistorySerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.product_name")
-    product_size = serializers.CharField(source="product.product_size")  # Add this line
-    product_color = serializers.CharField(
-        source="product.product_color"
-    )  # Add this line
+    product_size = serializers.CharField(source="product.product_size")
+    product_color = serializers.CharField(source="product.product_color")
     product_image = serializers.SerializerMethodField()
-    unit_price = serializers.FloatField(
-        source="product_price"
-    )  # Ensure unit_price is a float
+    unit_price = serializers.SerializerMethodField()
     quantity = serializers.IntegerField(source="order_item_quantity")
     date_created = serializers.DateTimeField(source="order.order_date_created")
     status = serializers.CharField(source="order.order_status")
+    original_price = serializers.DecimalField(
+        source="product_price", max_digits=10, decimal_places=2, read_only=True
+    )
+    discounted_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
+    has_discount = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
         fields = [
             "product_name",
-            "product_size",  # Include product_size in fields
-            "product_color",  # Include product_color in fields
+            "product_size",
+            "product_color",
             "product_image",
             "unit_price",
             "quantity",
             "date_created",
             "status",
+            "original_price",
+            "discounted_price",
+            "has_discount",
         ]
 
     def get_product_image(self, obj):
-        return obj.product.product_image.url if obj.product.product_image else None
+        if obj.product.product_image:
+            # Return the full URL of the image
+            return self.context["request"].build_absolute_uri(
+                obj.product.product_image.url
+            )
+        return None  # Return None if no image is available
+
+    def get_unit_price(self, obj):
+        if obj.discounted_price:
+            return f"₱{obj.discounted_price}"
+        else:
+            return f"₱{obj.product_price}"
+
+    def get_has_discount(self, obj):
+        return obj.discounted_price is not None
 
 
 class VATSettingSerializer(serializers.ModelSerializer):

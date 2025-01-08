@@ -10,8 +10,8 @@ from django.contrib.auth import authenticate, logout as django_logout
 from django.core.files.storage import default_storage
 from django.http import HttpResponse, JsonResponse
 from django.db import transaction
-from django.db.models import Count, Sum, F
-from django.db.models.functions import TruncMonth, ExtractMonth
+from django.db.models import Count, Sum, F, Prefetch
+from django.db.models.functions import TruncMonth, ExtractMonth, ExtractDay, TruncDate
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
@@ -51,7 +51,6 @@ from .serializers import (
 from .permissions import IsOwnerOrAdmin
 
 
-# FOR PRINTING IN KIOSK
 RPI_IP = "192.168.254.183"
 RPI_PORT = 8001  # Use port 8001 to connect to the print server
 
@@ -97,7 +96,7 @@ def print_receipt(request):
                     item["product"]["product_size"] = product.product_size
 
                 except Product.DoesNotExist:
-                    return JsonResponse(
+                    return Response(
                         {
                             "success": False,
                             "message": f"Error: Product with ID {item['product']['product_id']} does not exist.",
@@ -127,29 +126,41 @@ def print_receipt(request):
                 for item in print_data["items"]
             ]
 
-            # Send the print data to the Raspberry Pi
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((RPI_IP, RPI_PORT))
-                s.sendall(json.dumps(print_data).encode("utf-8"))
-                response = s.recv(1024).decode("utf-8")
+            # Attempt to connect to the printer with a timeout
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(10)  # Set a timeout of 10 seconds
+                    s.connect((RPI_IP, RPI_PORT))
+                    s.sendall(json.dumps(print_data).encode("utf-8"))
+                    response = s.recv(1024).decode("utf-8")
 
-            if "completed successfully" in response:
-                # Return the order_id along with success message
-                return JsonResponse(
+                if "completed successfully" in response:
+                    # Return the order_id along with success message
+                    return Response(
+                        {
+                            "success": True,
+                            "message": "Print job sent successfully",
+                            "order_id": order.order_id,  # Include the order_id in the response
+                        }
+                    )
+                else:
+                    # If printing fails, raise an exception to trigger rollback
+                    raise Exception("Printing failed: " + response)
+
+            except socket.timeout:
+                # If the printer is not detected within 15 seconds, proceed to save the order
+                return Response(
                     {
                         "success": True,
-                        "message": "Print job sent successfully",
+                        "message": "Printer not detected within 15 seconds. Order saved without printing.",
                         "order_id": order.order_id,  # Include the order_id in the response
                     }
                 )
-            else:
-                # If printing fails, raise an exception to trigger rollback
-                raise Exception("Printing failed: " + response)
 
     except Exception as e:
         print(f"Error in print_receipt: {str(e)}")
-        return JsonResponse(
-            {"success": False, "message": str(e)},
+        return Response(
+            {"success": False, "message ": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -827,17 +838,32 @@ class PendingOrdersView(APIView):
 
 
 class VoidOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def patch(self, request, order_id):
         try:
+            # Ensure the user is authenticated
+            if not request.user.is_authenticated:
+                return Response(
+                    {"error": "User is not authenticated."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Fetch the order by ID
             order = Order.objects.get(order_id=order_id)
             order.order_status = "Void"  # Update the order status to "Void"
+            order.order_cashier = f"{request.user.first_name} {request.user.last_name}"
             order.save()  # Save the changes
+
+            # Log the void action
             Log.objects.create(
                 username=request.user.username, action=f"Voided order {order_id}"
             )
+
             return Response(
                 {"message": "Order successfully voided."}, status=status.HTTP_200_OK
             )
+
         except Order.DoesNotExist:
             return Response(
                 {"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND
@@ -880,6 +906,7 @@ def is_printer_ready(printer_name):
 
 
 @api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
 def pay_order(request, order_id):
     try:
         # Check if the printer is ready before processing the payment
@@ -907,9 +934,9 @@ def pay_order(request, order_id):
             amount_given = request.data.get("order_paid_amount")
             amount_given = Decimal(amount_given)
 
-            # Calculate subtotal
+            # Calculate subtotal using discounted prices
             subtotal = sum(
-                item.product.product_price * item.order_item_quantity
+                (item.discounted_price or item.product_price) * item.order_item_quantity
                 for item in order.orderitem_set.all()
             )
 
@@ -939,6 +966,7 @@ def pay_order(request, order_id):
             order.order_paid_amount = amount_given
             order.order_change = change
             order.order_amount = total_amount  # Update to total amount after VAT
+            order.order_cashier = f"{request.user.first_name} {request.user.last_name}"
             order.save()
 
             # Update product quantities and sold counts
@@ -1058,8 +1086,16 @@ def order_counts(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])  # Require authentication for this endpoint
 def satisfaction_overview(request):
+    # Get the selected year from the query parameters
+    selected_year = request.query_params.get("year", None)
+
+    # Filter feedback based on the selected year
+    feedback_queryset = Feedback.objects.all()
+    if selected_year:
+        feedback_queryset = feedback_queryset.filter(feedback_date__year=selected_year)
+
     # Aggregate satisfaction ratings
-    satisfaction_counts = Feedback.objects.values("feedback_satisfaction").annotate(
+    satisfaction_counts = feedback_queryset.values("feedback_satisfaction").annotate(
         count=Count("feedback_satisfaction")
     )
 
@@ -1073,32 +1109,76 @@ def satisfaction_overview(request):
 
 
 class CustomerCountByMonthView(APIView):
-    @permission_classes([IsAuthenticated])
-    def get(self, request):
-        # Get the current year
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, view_type):
         current_year = timezone.now().year
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
 
-        # Query to count customers grouped by month
-        customer_counts = (
-            Customer.objects.filter(date_created__year=current_year)
-            .annotate(month=ExtractMonth("date_created"))
-            .values("month")
-            .annotate(count=Count("customer_id"))
-            .order_by("month")
-        )
+        if view_type == "month":
+            # Get the selected year from query params, default to current year
+            selected_year = int(request.query_params.get("year", current_year))
+            order_counts = (
+                Order.objects.filter(
+                    order_status="Paid", order_date_created__year=selected_year
+                )
+                .annotate(month=ExtractMonth("order_date_created"))
+                .values("month")
+                .annotate(count=Count("order_id"))
+                .order_by("month")
+            )
+            # Initialize data with 0s for each month
+            data = [0] * 12
+            for entry in order_counts:
+                data[entry["month"] - 1] = entry["count"]
 
-        # Prepare the response data
-        data = {month: count for month, count in enumerate([0] * 12)}
-        for entry in customer_counts:
-            data[entry["month"] - 1] = entry["count"]  # Month is 1-indexed
+            return Response(data)
 
-        return Response(data)
+        elif view_type == "day":
+            # Get year and month from query parameters
+            selected_year = int(request.query_params.get("year", current_year))
+            selected_month = int(
+                request.query_params.get("month", timezone.now().month)
+            )
+
+            if start_date and end_date:
+                year, month, _ = start_date.split(
+                    "-"
+                )  # Extract year and month from start_date
+                order_counts = (
+                    Order.objects.filter(
+                        order_status="Paid",
+                        order_date_created__year=year,
+                        order_date_created__month=month,
+                    )
+                    .annotate(day=ExtractDay("order_date_created"))
+                    .values("day")
+                    .annotate(count=Count("order_id"))
+                    .order_by("day")
+                )
+                # Initialize data with 0s for up to 31 days
+                data = [0] * 31
+                for entry in order_counts:
+                    data[entry["day"] - 1] = entry["count"]
+
+                # If it's the current month, show only past and current days
+                if timezone.now().month == int(month) and timezone.now().year == int(
+                    year
+                ):
+                    today = timezone.now().day
+                    data = data[
+                        :today
+                    ]  # Limit the data to only include days up to today
+
+            return Response(data)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def top_selling_products(request):
-    current_year = timezone.now().year
+    # Get the selected year from the query parameters (default to current year if not provided)
+    selected_year = request.query_params.get("year", timezone.now().year)
     monthly_top_products = []
 
     # Loop through each month (1-12)
@@ -1106,12 +1186,12 @@ def top_selling_products(request):
         # Get total quantity sold for each product in this month, filter by minimum total_sold, and limit to 7 results
         monthly_sales = (
             OrderItem.objects.filter(
-                order__order_date_created__year=current_year,
+                order__order_date_created__year=selected_year,  # Filter by selected year
                 order__order_date_created__month=month,
             )
             .values("product_id")
             .annotate(total_sold=Sum("order_item_quantity"))
-            .filter(total_sold__gte=10)  # Only include products with total_sold >= 10
+            .filter(total_sold__gte=20)  # Only include products with total_sold >= 20
             .order_by("-total_sold")[:7]  # Limit to top 7 results
         )
 
@@ -1125,9 +1205,10 @@ def top_selling_products(request):
                         product_details.product_image.url
                     ),
                     "product_type": product_details.product_type,  # Include product type
+                    "product_color": product_details.product_color,
                     "product_size": product_details.product_size,  # Include product size
                     "top_selling_month": timezone.datetime(
-                        current_year, month, 1
+                        int(selected_year), month, 1
                     ).strftime(
                         "%B"
                     ),  # Display month name
@@ -1154,7 +1235,7 @@ def low_selling_products(request):
             )
             .values("product_id")
             .annotate(total_sold=Sum("order_item_quantity"))
-            .filter(total_sold__lt=10)  # Only include products with total_sold < 10
+            .filter(total_sold__lt=20)  # Only include products with total_sold < 10
             .order_by("total_sold")[:7]  # Limit to bottom 7 results (lowest sold)
         )
 
@@ -1168,6 +1249,7 @@ def low_selling_products(request):
                         product_details.product_image.url
                     ),
                     "product_type": product_details.product_type,  # Include product type
+                    "product_color": product_details.product_color,
                     "product_size": product_details.product_size,  # Include product size
                     "low_selling_month": timezone.datetime(
                         current_year, month, 1
@@ -1279,7 +1361,10 @@ def order_history(request):
                         "product_size": item.product.product_size,  # Include product_size here
                         "date_created": order.order_date_created,
                         "status": order.order_status,
-                        "unit_price": float(item.product_price),
+                        "unit_price": {
+                            "original": item.product_price,
+                            "discounted": item.discounted_price,
+                        },
                         "quantity": item.order_item_quantity,
                     }
                 )
@@ -1289,6 +1374,7 @@ def order_history(request):
             grouped_orders.append(
                 {
                     "order_id": order.order_id,
+                    "order_cashier": order.order_cashier,  # Include order_cashier
                     "items": items,
                 }
             )
@@ -1322,45 +1408,89 @@ def monthly_sales(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_products_sold(request):
-    year = request.GET.get("year")
-    month = request.GET.get("month")
+def daily_sales(request):
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
 
-    if not year or not month:
-        return Response({"error": "Year and month are required."}, status=400)
+    if not start_date or not end_date:
+        return Response({"error": "Start date and end date are required."}, status=400)
 
-    # Query to get products sold in the specified month and year
-    products_sold = (
-        OrderItem.objects.filter(
-            order__order_date_created__year=year, order__order_date_created__month=month
+    # Query to get total sales for each day in the specified date range
+    sales_data = (
+        Order.objects.filter(
+            order_date_created__date__gte=start_date,
+            order_date_created__date__lte=end_date,
+            order_status="Paid",
         )
-        .values(
-            "product__product_name", "product__product_image"
-        )  # Corrected field name
-        .annotate(total_sold=Sum("order_item_quantity"))  # Sum quantities sold
+        .values("order_date_created__date")
+        .annotate(total_sales=Sum("order_amount"))
+        .order_by("order_date_created__date")
     )
 
     # Prepare the response data
-    response_data = [
-        {
-            "product_name": item["product__product_name"],
-            "quantity": item["total_sold"],
-            "product_image": item[
-                "product__product_image"
-            ],  # Ensure this returns the correct relative path
-        }
-        for item in products_sold
-    ]
+    response_data = {
+        entry["order_date_created__date"].isoformat(): entry["total_sales"]
+        for entry in sales_data
+    }
 
     return Response(response_data)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_monthly_products_sold(request):
+    year = request.GET.get("year")
+    month = request.GET.get("month")
+
+    if year and month:
+        # Get the total sold for each product in the specified month and year
+        sold_products = (
+            OrderItem.objects.filter(
+                order__order_date_created__year=year,
+                order__order_date_created__month=month,
+                order__order_status="Paid",  # Ensure only paid orders are counted
+            )
+            .select_related("product")  # Fetch related product data
+            .values(
+                "product__product_id",  # Get product IDs
+                "product__product_image",
+                "product__product_name",
+                "product__product_color",
+                "product__product_size",
+            )
+            .annotate(total_sold=Sum("order_item_quantity"))  # Sum quantities sold
+        )
+
+        # Create a list of products with their sold quantities and images
+        response_data = [
+            {
+                "product_id": item["product__product_id"],
+                "product_image": item["product__product_image"],
+                "product_name": item["product__product_name"],
+                "quantity": item["total_sold"],
+                "product_color": item["product__product_color"],
+                "product_size": item["product__product_size"],
+            }
+            for item in sold_products
+        ]
+
+        return Response(response_data)
+
+    return Response({"error": "Year and month must be provided."}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def sales_by_category(request):
-    # Get sales data for orders with status "Paid"
+    # Get the selected year from the query parameters (default to current year if not provided)
+    selected_year = request.query_params.get("year", None)
+
+    # Get sales data for orders with status "Paid" and the selected year
     sales_data = (
-        OrderItem.objects.filter(order__order_status="Paid")
+        OrderItem.objects.filter(
+            order__order_status="Paid",
+            order__order_date_created__year=selected_year,  # Filter by selected year
+        )
         .values("product__sub_category__main_category__main_category_name")
         .annotate(total_sales=Sum(F("product_price") * F("order_item_quantity")))
     )
@@ -1429,3 +1559,223 @@ class VATSettingView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_data_whole_year(request):
+    year = request.GET.get("year", timezone.now().year)
+
+    # Monthly sales data
+    monthly_sales = (
+        Order.objects.filter(order_date_created__year=year, order_status="Paid")
+        .annotate(month=ExtractMonth("order_date_created"))
+        .values("month")
+        .annotate(total=Sum("order_amount"))
+        .order_by("month")
+    )
+
+    # Daily sales data
+    daily_sales = (
+        Order.objects.filter(order_date_created__year=year, order_status="Paid")
+        .annotate(date=TruncDate("order_date_created"))
+        .values("date")
+        .annotate(total=Sum("order_amount"))
+        .order_by("date")
+    )
+
+    # Paid orders with product names, colors, sizes, and types for the selected year
+    paid_orders = (
+        Order.objects.filter(order_status="Paid")
+        .prefetch_related(
+            Prefetch(
+                "orderitem_set", queryset=OrderItem.objects.select_related("product")
+            )
+        )
+        .filter(order_id__startswith=str(year))  # Filter by year in order_id
+        .values(
+            "order_id",
+            "order_amount",
+            "orderitem__product__product_name",
+            "orderitem__product__product_type",
+            "orderitem__product__product_color",
+            "orderitem__product__product_size",
+        )
+    )
+
+    # Prepare the response data for paid orders
+    paid_orders_data = []
+    for order in paid_orders:
+        paid_orders_data.append(
+            {
+                "order_id": order["order_id"],
+                "amount": order["order_amount"],
+                "product_name": order["orderitem__product__product_name"],
+                "product_type": order["orderitem__product__product_type"],
+                "color": order["orderitem__product__product_color"],
+                "size": order["orderitem__product__product_size"],
+            }
+        )
+
+    # Products sold data for the selected year
+    products_sold = (
+        OrderItem.objects.filter(
+            order__order_status="Paid", order__order_id__startswith=str(year)
+        )
+        .values(
+            "product__product_name",
+            "product__product_type",
+            "product__product_color",
+            "product__product_size",
+        )
+        .annotate(total_sold=Sum("order_item_quantity"))
+    )
+
+    # Prepare products sold data
+    products_sold_data = []
+    for product in products_sold:
+        products_sold_data.append(
+            {
+                "name": product["product__product_name"],
+                "product_type": product["product__product_type"],
+                "color": product["product__product_color"],
+                "size": product["product__product_size"],
+                "totalSold": product["total_sold"],
+            }
+        )
+
+    return Response(
+        {
+            "monthlySales": monthly_sales,
+            "dailySales": daily_sales,
+            "paidOrders": paid_orders_data,
+            "productsSold": products_sold_data,
+        }
+    )
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_order_item(request, order_id):
+    try:
+        order = Order.objects.get(order_id=order_id)
+        items_data = request.data.get("items", [])
+
+        for item_data in items_data:
+            order_item_id = item_data.get("order_item_id")
+            new_quantity = item_data.get("quantity")
+            discounted_price = item_data.get("discounted_price")
+
+            if order_item_id is None:
+                return Response(
+                    {"error": "Order item ID is missing from the request data."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if new_quantity is None:
+                return Response(
+                    {"error": "Quantity is missing from the request data."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                order_item = OrderItem.objects.get(
+                    order=order,
+                    order_item_id=order_item_id,
+                )
+            except OrderItem.DoesNotExist:
+                return Response(
+                    {
+                        "error": f"Order item with ID {order_item_id} not found in order {order_id}."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            order_item.order_item_quantity = new_quantity
+            if discounted_price is not None:
+                order_item.discounted_price = discounted_price
+            else:
+                order_item.discounted_price = (
+                    None  # Set discounted_price to None if it's not provided
+                )
+            order_item.save()
+
+        # Update the order amount
+        order_items = OrderItem.objects.filter(order=order)
+        new_amount = sum(
+            (
+                item.discounted_price
+                if item.discounted_price is not None
+                else item.product_price
+            )
+            * item.order_item_quantity
+            for item in order_items
+        )
+        order.order_amount = new_amount
+        order.save()
+
+        return Response(
+            {"message": "Order item updated successfully."}, status=status.HTTP_200_OK
+        )
+
+    except Order.DoesNotExist:
+        return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error for debugging
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_order_amount(request, order_id):
+    try:
+        order = Order.objects.get(order_id=order_id)
+        new_amount = request.data.get("order_amount")
+
+        if new_amount is None:
+            return Response(
+                {"error": "Order amount is missing from the request data."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order.order_amount = new_amount
+        order.save()
+
+        return Response(
+            {"message": "Order amount updated successfully."}, status=status.HTTP_200_OK
+        )
+
+    except Order.DoesNotExist:
+        return Response({"error": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(f"Error: {str(e)}")  # Log the error for debugging
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def cashier_transactions(request):
+    # Group orders by cashier
+    cashiers = Order.objects.values('order_cashier').distinct()
+    transactions = []
+
+    for cashier in cashiers:
+        cashier_name = cashier['order_cashier']
+        orders = Order.objects.filter(order_cashier=cashier_name).order_by('-order_date_created')
+        order_data = []
+
+        for order in orders:
+            order_items = OrderItem.objects.filter(order=order)
+            order_data.append({
+                'order_id': order.order_id,
+                'order_date_created': order.order_date_created,
+                'order_status': order.order_status,
+                'order_items': OrderItemHistorySerializer(order_items, many=True, context={'request': request}).data,
+            })
+
+        transactions.append({
+            'cashier_name': cashier_name,
+            'orders': order_data,
+        })
+
+    return Response(transactions)

@@ -169,6 +169,7 @@ class Order(models.Model):
         max_digits=10, decimal_places=2, default=0.00
     )
     order_change = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    order_cashier = models.CharField(max_length=255, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.order_id:
@@ -224,6 +225,7 @@ class OrderItem(models.Model):
     product = models.ForeignKey("Product", on_delete=models.CASCADE)
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     order_item_quantity = models.IntegerField()
+    discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if not self.order_item_id:
