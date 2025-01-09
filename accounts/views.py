@@ -212,7 +212,10 @@ def create_order(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        Log.objects.create(username=request.user.username, action="Created a new order")
+        Log.objects.create(
+            username=request.user.username,
+            action=f"Created a new order with ID {order.order_id}",
+        )
         return Response(
             {
                 "success": True,
@@ -1752,30 +1755,38 @@ def update_order_amount(request, order_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def cashier_transactions(request):
     # Group orders by cashier
-    cashiers = Order.objects.values('order_cashier').distinct()
+    cashiers = Order.objects.values("order_cashier").distinct()
     transactions = []
 
     for cashier in cashiers:
-        cashier_name = cashier['order_cashier']
-        orders = Order.objects.filter(order_cashier=cashier_name).order_by('-order_date_created')
+        cashier_name = cashier["order_cashier"]
+        orders = Order.objects.filter(order_cashier=cashier_name).order_by(
+            "-order_date_created"
+        )
         order_data = []
 
         for order in orders:
             order_items = OrderItem.objects.filter(order=order)
-            order_data.append({
-                'order_id': order.order_id,
-                'order_date_created': order.order_date_created,
-                'order_status': order.order_status,
-                'order_items': OrderItemHistorySerializer(order_items, many=True, context={'request': request}).data,
-            })
+            order_data.append(
+                {
+                    "order_id": order.order_id,
+                    "order_date_created": order.order_date_created,
+                    "order_status": order.order_status,
+                    "order_items": OrderItemHistorySerializer(
+                        order_items, many=True, context={"request": request}
+                    ).data,
+                }
+            )
 
-        transactions.append({
-            'cashier_name': cashier_name,
-            'orders': order_data,
-        })
+        transactions.append(
+            {
+                "cashier_name": cashier_name,
+                "orders": order_data,
+            }
+        )
 
     return Response(transactions)
